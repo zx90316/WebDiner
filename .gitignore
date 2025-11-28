@@ -1,0 +1,4 @@
+/.pytest_cache
+/.venv
+/webdiner.db
+/__pycache__
