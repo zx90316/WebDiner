@@ -45,22 +45,29 @@ def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db), curr
     check_cutoff(order.order_date)
     
     # 3. Verify vendor exists
-    vendor = db.query(models.Vendor).filter(models.Vendor.id == order.vendor_id).first()
-    if not vendor or not vendor.is_active:
-        raise HTTPException(status_code=404, detail="Vendor not found or inactive")
-    
-    # 4. Verify menu item exists and belongs to vendor
-    menu_item = db.query(models.VendorMenuItem).filter(
-        models.VendorMenuItem.id == order.vendor_menu_item_id,
-        models.VendorMenuItem.vendor_id == order.vendor_id
-    ).first()
-    if not menu_item or not menu_item.is_active:
-        raise HTTPException(status_code=404, detail="Menu item not found or inactive")
-    
-    # 5. Check if menu item is available on this day
-    weekday = order.order_date.weekday()
-    if menu_item.weekday is not None and menu_item.weekday != weekday:
-        raise HTTPException(status_code=400, detail=f"This menu item is not available on {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][weekday]}")
+    if not order.is_no_order:
+        if not order.vendor_id:
+             raise HTTPException(status_code=400, detail="Vendor ID required for normal orders")
+             
+        vendor = db.query(models.Vendor).filter(models.Vendor.id == order.vendor_id).first()
+        if not vendor or not vendor.is_active:
+            raise HTTPException(status_code=404, detail="Vendor not found or inactive")
+        
+        # 4. Verify menu item exists and belongs to vendor
+        if not order.vendor_menu_item_id:
+             raise HTTPException(status_code=400, detail="Menu Item ID required for normal orders")
+
+        menu_item = db.query(models.VendorMenuItem).filter(
+            models.VendorMenuItem.id == order.vendor_menu_item_id,
+            models.VendorMenuItem.vendor_id == order.vendor_id
+        ).first()
+        if not menu_item or not menu_item.is_active:
+            raise HTTPException(status_code=404, detail="Menu item not found or inactive")
+        
+        # 5. Check if menu item is available on this day
+        weekday = order.order_date.weekday()
+        if menu_item.weekday is not None and menu_item.weekday != weekday:
+            raise HTTPException(status_code=400, detail=f"This menu item is not available on {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][weekday]}")
     
     # 6. Check if order already exists for this date
     existing_order = db.query(models.Order).filter(
@@ -73,10 +80,10 @@ def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db), curr
     # 7. Create Order
     db_order = models.Order(
         user_id=current_user.id,
-        vendor_id=order.vendor_id,
-        vendor_menu_item_id=order.vendor_menu_item_id,
+        vendor_id=None if order.is_no_order else order.vendor_id,
+        vendor_menu_item_id=None if order.is_no_order else order.vendor_menu_item_id,
         order_date=order.order_date,
-        status="Pending"
+        status="NoOrder" if order.is_no_order else "Pending"
     )
     db.add(db_order)
     db.commit()
@@ -84,60 +91,89 @@ def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db), curr
     return db_order
 
 @router.post("/batch", response_model=List[schemas.Order])
+@router.post("/batch", response_model=List[schemas.Order])
 def create_batch_orders(batch: schemas.OrderBatchCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """Create multiple orders at once"""
+    """Create multiple orders at once (Optimized)"""
+    if not batch.orders:
+        return []
+
+    # 1. Collect IDs and Dates
+    dates = {o.order_date for o in batch.orders}
+    vendor_ids = {o.vendor_id for o in batch.orders if o.vendor_id}
+    menu_item_ids = {o.vendor_menu_item_id for o in batch.orders if o.vendor_menu_item_id}
+    
+    # 2. Prefetch Data
+    # Existing orders
+    existing_orders = db.query(models.Order).filter(
+        models.Order.user_id == current_user.id,
+        models.Order.order_date.in_(dates)
+    ).all()
+    existing_dates = {o.order_date for o in existing_orders}
+    
+    # Vendors
+    vendors = db.query(models.Vendor).filter(models.Vendor.id.in_(vendor_ids)).all()
+    vendor_map = {v.id: v for v in vendors}
+    
+    # Menu Items
+    menu_items = db.query(models.VendorMenuItem).filter(models.VendorMenuItem.id.in_(menu_item_ids)).all()
+    menu_item_map = {m.id: m for m in menu_items}
+    
     created_orders = []
     
-    for order_data in batch.orders:  
-        # Check if order already exists for this date
-        existing_order = db.query(models.Order).filter(
-            models.Order.user_id == current_user.id,
-            models.Order.order_date == order_data.order_date
-        ).first()
-        
-        if existing_order:
+    for order_data in batch.orders:
+        # Skip if order exists
+        if order_data.order_date in existing_dates:
             continue
-        
-        # Basic validation (without throwing exceptions for batch)
+            
+        # Basic validation
         if is_holiday_or_weekend(order_data.order_date):
             continue
-        
+            
         try:
             check_cutoff(order_data.order_date)
-        except HTTPException as e:
+        except HTTPException:
             continue
+            
+        # Verify vendor/item if not "No Order"
+        if not order_data.is_no_order:
+            if not order_data.vendor_id or not order_data.vendor_menu_item_id:
+                continue
+                
+            vendor = vendor_map.get(order_data.vendor_id)
+            if not vendor or not vendor.is_active:
+                continue
+                
+            menu_item = menu_item_map.get(order_data.vendor_menu_item_id)
+            if not menu_item or not menu_item.is_active:
+                continue
+                
+            if menu_item.vendor_id != order_data.vendor_id:
+                continue
+                
+            # Check weekday availability
+            weekday = order_data.order_date.weekday()
+            if menu_item.weekday is not None and menu_item.weekday != weekday:
+                continue
         
-        # Verify vendor and menu item
-        vendor = db.query(models.Vendor).filter(models.Vendor.id == order_data.vendor_id).first()
-        if not vendor or not vendor.is_active:
-            continue
-        
-        menu_item = db.query(models.VendorMenuItem).filter(
-            models.VendorMenuItem.id == order_data.vendor_menu_item_id,
-            models.VendorMenuItem.vendor_id == order_data.vendor_id
-        ).first()
-        if not menu_item or not menu_item.is_active:
-            continue
-        
-        # Check weekday availability
-        weekday = order_data.order_date.weekday()
-        if menu_item.weekday is not None and menu_item.weekday != weekday:
-            continue
-        
-        # Create order
+        # Create order object
         db_order = models.Order(
             user_id=current_user.id,
-            vendor_id=order_data.vendor_id,
-            vendor_menu_item_id=order_data.vendor_menu_item_id,
+            vendor_id=None if order_data.is_no_order else order_data.vendor_id,
+            vendor_menu_item_id=None if order_data.is_no_order else order_data.vendor_menu_item_id,
             order_date=order_data.order_date,
-            status="Pending"
+            status="NoOrder" if order_data.is_no_order else "Pending"
         )
         db.add(db_order)
         created_orders.append(db_order)
     
-    db.commit()
-    for order in created_orders:
-        db.refresh(order)
+    if created_orders:
+        try:
+            db.commit()
+            for order in created_orders:
+                db.refresh(order)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     
     return created_orders
 
@@ -147,9 +183,16 @@ def read_orders(db: Session = Depends(get_db), current_user: models.User = Depen
     orders = db.query(models.Order).filter(models.Order.user_id == current_user.id).all()
     
     result = []
+    result = []
     for order in orders:
-        vendor = db.query(models.Vendor).filter(models.Vendor.id == order.vendor_id).first()
-        menu_item = db.query(models.VendorMenuItem).filter(models.VendorMenuItem.id == order.vendor_menu_item_id).first()
+        vendor = None
+        menu_item = None
+        
+        if order.vendor_id:
+            vendor = db.query(models.Vendor).filter(models.Vendor.id == order.vendor_id).first()
+        
+        if order.vendor_menu_item_id:
+            menu_item = db.query(models.VendorMenuItem).filter(models.VendorMenuItem.id == order.vendor_menu_item_id).first()
         
         order_dict = {
             "id": order.id,
@@ -159,8 +202,9 @@ def read_orders(db: Session = Depends(get_db), current_user: models.User = Depen
             "order_date": order.order_date,
             "created_at": order.created_at,
             "status": order.status,
-            "vendor_name": vendor.name if vendor else None,
-            "menu_item_name": menu_item.name if menu_item else None,
+            "vendor_name": vendor.name if vendor else ("不訂餐" if order.status == "NoOrder" else None),
+            "vendor_color": vendor.color if vendor else None,
+            "menu_item_name": menu_item.name if menu_item else ("不訂餐" if order.status == "NoOrder" else None),
             "menu_item_price": menu_item.price if menu_item else None
         }
         result.append(order_dict)

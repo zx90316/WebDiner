@@ -24,6 +24,7 @@ class Vendor(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)  # 廠商名稱
     description = Column(String)
+    color = Column(String, default="#3B82F6")  # 廠商代表色
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

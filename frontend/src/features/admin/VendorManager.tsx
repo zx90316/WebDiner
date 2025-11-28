@@ -8,6 +8,7 @@ interface Vendor {
     id: number;
     name: string;
     description: string;
+    color: string;
     is_active: boolean;
 }
 
@@ -21,6 +22,7 @@ export const VendorManager: React.FC = () => {
     const [formData, setFormData] = useState({
         name: "",
         description: "",
+        color: "#3B82F6",
     });
 
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -54,6 +56,7 @@ export const VendorManager: React.FC = () => {
             const payload = {
                 name: formData.name,
                 description: formData.description,
+                color: formData.color,
                 is_active: true,
             };
 
@@ -65,7 +68,7 @@ export const VendorManager: React.FC = () => {
                 showToast("廠商已新增", "success");
             }
 
-            setFormData({ name: "", description: "" });
+            setFormData({ name: "", description: "", color: "#3B82F6" });
             setEditingId(null);
             loadVendors();
         } catch (error: any) {
@@ -79,6 +82,7 @@ export const VendorManager: React.FC = () => {
         setFormData({
             name: vendor.name,
             description: vendor.description,
+            color: vendor.color || "#3B82F6",
         });
         setEditingId(vendor.id);
     };
@@ -98,7 +102,7 @@ export const VendorManager: React.FC = () => {
     };
 
     const cancelEdit = () => {
-        setFormData({ name: "", description: "" });
+        setFormData({ name: "", description: "", color: "#3B82F6" });
         setEditingId(null);
     };
 
@@ -134,6 +138,18 @@ export const VendorManager: React.FC = () => {
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                         />
                     </div>
+                    <div>
+                        <label className="block text-gray-700 mb-2 font-medium">代表色</label>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="color"
+                                className="h-10 w-20 p-1 border rounded cursor-pointer"
+                                value={formData.color}
+                                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                            />
+                            <span className="text-gray-500 text-sm">{formData.color}</span>
+                        </div>
+                    </div>
                 </div>
                 <div className="flex gap-2 mt-4">
                     <LoadingButton
@@ -160,6 +176,7 @@ export const VendorManager: React.FC = () => {
                     <thead>
                         <tr className="bg-gray-100 border-b">
                             <th className="text-left p-3 font-semibold">廠商名稱</th>
+                            <th className="text-left p-3 font-semibold">代表色</th>
                             <th className="text-left p-3 font-semibold">描述</th>
                             <th className="text-center p-3 font-semibold">操作</th>
                         </tr>
@@ -168,6 +185,15 @@ export const VendorManager: React.FC = () => {
                         {vendors.map((vendor) => (
                             <tr key={vendor.id} className="border-b hover:bg-gray-50">
                                 <td className="p-3 font-medium">{vendor.name}</td>
+                                <td className="p-3">
+                                    <div className="flex items-center gap-2">
+                                        <div
+                                            className="w-6 h-6 rounded border shadow-sm"
+                                            style={{ backgroundColor: vendor.color || "#3B82F6" }}
+                                        />
+                                        <span className="text-xs text-gray-500">{vendor.color}</span>
+                                    </div>
+                                </td>
                                 <td className="p-3 text-gray-600">{vendor.description || "-"}</td>
                                 <td className="p-3 text-center">
                                     <button

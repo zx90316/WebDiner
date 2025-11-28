@@ -2,3 +2,7 @@
 /.venv
 /webdiner.db
 /__pycache__
+app/__pycache__/
+webdiner.db-shm
+webdiner.db-wal
+app/routers/__pycache__/

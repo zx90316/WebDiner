@@ -35,6 +35,7 @@ class TokenData(BaseModel):
 class VendorBase(BaseModel):
     name: str
     description: Optional[str] = None
+    color: Optional[str] = "#3B82F6"
     is_active: bool = True
 
 class VendorCreate(VendorBase):
@@ -89,8 +90,9 @@ class OrderItem(BaseModel):
 
 class OrderCreate(BaseModel):
     order_date: date
-    vendor_id: int
-    vendor_menu_item_id: int
+    vendor_id: Optional[int] = None
+    vendor_menu_item_id: Optional[int] = None
+    is_no_order: bool = False
 
 class OrderBatchCreate(BaseModel):
     """For creating multiple orders at once"""
@@ -99,8 +101,8 @@ class OrderBatchCreate(BaseModel):
 class Order(BaseModel):
     id: int
     user_id: int
-    vendor_id: int
-    vendor_menu_item_id: int
+    vendor_id: Optional[int] = None
+    vendor_menu_item_id: Optional[int] = None
     order_date: date
     created_at: datetime
     status: str
@@ -111,5 +113,6 @@ class Order(BaseModel):
 class OrderWithDetails(Order):
     """Order with vendor and menu item details"""
     vendor_name: Optional[str] = None
+    vendor_color: Optional[str] = None
     menu_item_name: Optional[str] = None
     menu_item_price: Optional[int] = None

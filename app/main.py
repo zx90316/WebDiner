@@ -9,6 +9,13 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="VSCC-WebDiner API")
 
+@app.on_event("startup")
+def on_startup():
+    with engine.connect() as connection:
+        from sqlalchemy import text
+        connection.execute(text("PRAGMA journal_mode=WAL;"))
+        connection.execute(text("PRAGMA synchronous=NORMAL;"))
+
 # CORS
 origins = [
     "http://localhost:5173", # Vite default

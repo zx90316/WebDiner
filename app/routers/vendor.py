@@ -182,7 +182,8 @@ def get_available_vendors(order_date: str, db: Session = Depends(get_db), curren
                 "vendor": {
                     "id": vendor.id,
                     "name": vendor.name,
-                    "description": vendor.description
+                    "description": vendor.description,
+                    "color": vendor.color
                 },
                 "menu_items": [
                     {
