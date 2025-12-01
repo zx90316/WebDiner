@@ -30,15 +30,17 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # 允許 localhost、127.0.0.1 和內網 IP (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}):\d+",
 )
 
-# Include Routers
-app.include_router(auth.router)
-app.include_router(menu.router)
-app.include_router(orders.router)
-app.include_router(admin.router)
-app.include_router(vendor.router)
-app.include_router(extension_directory.router)
+# Include Routers (所有 API 都加上 /api 前綴，避免與前端路由衝突)
+app.include_router(auth.router, prefix="/api")
+app.include_router(menu.router, prefix="/api")
+app.include_router(orders.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
+app.include_router(vendor.router, prefix="/api")
+app.include_router(extension_directory.router, prefix="/api")
 
 
 @app.get("/")

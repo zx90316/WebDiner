@@ -1,4 +1,5 @@
-const API_URL = "http://localhost:8000";
+// 使用 /api 前綴，讓 vite proxy 代理請求（支援內網 IP 訪問）
+const API_URL = "/api";
 
 export const api = {
     async get(endpoint: string, token?: string) {
