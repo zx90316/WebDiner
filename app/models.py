@@ -14,10 +14,18 @@ class User(Base):
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    role = Column(String, default="user") # user, admin, sysadmin
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
 
+    department = relationship("Department")
     orders = relationship("Order", back_populates="user")
 
-# New: Vendor model
+class Department(Base):
+    __tablename__ = "departments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    is_active = Column(Boolean, default=True)
 class Vendor(Base):
     __tablename__ = "vendors"
 
@@ -72,3 +80,12 @@ class Order(Base):
     user = relationship("User", back_populates="orders")
     vendor = relationship("Vendor", back_populates="orders")  # New
     menu_item = relationship("VendorMenuItem")  # New
+
+class SpecialDay(Base):
+    __tablename__ = "special_days"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, unique=True, index=True)
+    is_holiday = Column(Boolean, default=True)  # True = Holiday, False = Workday (makeup day)
+    description = Column(String, nullable=True)
+

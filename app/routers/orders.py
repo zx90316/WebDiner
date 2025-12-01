@@ -16,11 +16,15 @@ from ..database import get_db
 
 CUTOFF_TIME = time(9, 0) # 9:00 AM
 
-def is_holiday_or_weekend(order_date: date):
+def is_holiday_or_weekend(order_date: date, db: Session):
+    # Check SpecialDay first
+    special_day = db.query(models.SpecialDay).filter(models.SpecialDay.date == order_date).first()
+    if special_day:
+        return special_day.is_holiday
+
     # Weekend check (5=Saturday, 6=Sunday)
     if order_date.weekday() >= 5:
         return True
-    # TODO: Add holiday list check here
     return False
 
 def check_cutoff(order_date: date):
@@ -34,11 +38,15 @@ def check_cutoff(order_date: date):
         if now.time() > CUTOFF_TIME:
             raise HTTPException(status_code=400, detail="Order cut-off time (9:00 AM) has passed for today")
 
+@router.get("/special_days", response_model=List[schemas.SpecialDay])
+def get_public_special_days(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return db.query(models.SpecialDay).all()
+
 @router.post("/", response_model=schemas.Order)
 def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Create a new order"""
     # 1. Check Holiday/Weekend
-    if is_holiday_or_weekend(order.order_date):
+    if is_holiday_or_weekend(order.order_date, db):
         raise HTTPException(status_code=400, detail="Cannot order on weekends or holidays")
 
     # 2. Check Cut-off time
@@ -91,7 +99,6 @@ def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db), curr
     return db_order
 
 @router.post("/batch", response_model=List[schemas.Order])
-@router.post("/batch", response_model=List[schemas.Order])
 def create_batch_orders(batch: schemas.OrderBatchCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Create multiple orders at once (Optimized)"""
     if not batch.orders:
@@ -126,7 +133,7 @@ def create_batch_orders(batch: schemas.OrderBatchCreate, db: Session = Depends(g
             continue
             
         # Basic validation
-        if is_holiday_or_weekend(order_data.order_date):
+        if is_holiday_or_weekend(order_data.order_date, db):
             continue
             
         try:
@@ -182,7 +189,6 @@ def read_orders(db: Session = Depends(get_db), current_user: models.User = Depen
     """Get all orders for current user"""
     orders = db.query(models.Order).filter(models.Order.user_id == current_user.id).all()
     
-    result = []
     result = []
     for order in orders:
         vendor = None

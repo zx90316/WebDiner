@@ -119,7 +119,7 @@ export const MyOrders: React.FC = () => {
                                                     : "bg-gray-100 text-gray-800"
                                                 }`}
                                         >
-                                            {order.status === "Pending" ? "待處理" : order.status === "Completed" ? "已完成" : "已取消"}
+                                            {order.status === "Pending" ? "待處理" : order.status === "Confirmed" ? "已完成" : "已取消"}
                                         </span>
                                         {canCancel(order.order_date) && order.status === "Pending" && (
                                             <button

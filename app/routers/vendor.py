@@ -92,8 +92,8 @@ def create_vendor_menu_item(
         raise HTTPException(status_code=404, detail="Vendor not found")
     
     # Validate weekday
-    if menu_item.weekday is not None and (menu_item.weekday < 0 or menu_item.weekday > 4):
-        raise HTTPException(status_code=400, detail="Weekday must be between 0 (Monday) and 4 (Friday), or null for all days")
+    if menu_item.weekday is not None and (menu_item.weekday < 0 or menu_item.weekday > 6):
+        raise HTTPException(status_code=400, detail="Weekday must be between 0 (Monday) and 6 (Sunday), or null for all days")
     
     db_menu_item = models.VendorMenuItem(vendor_id=vendor_id, **menu_item.dict())
     db.add(db_menu_item)
@@ -163,7 +163,16 @@ def get_available_vendors(order_date: str, db: Session = Depends(get_db), curren
     
     weekday = date_obj.weekday()  # 0=Monday, 6=Sunday
     
-    if weekday >= 5:  # Weekend
+    # Check SpecialDay
+    special_day = db.query(models.SpecialDay).filter(models.SpecialDay.date == date_obj).first()
+    is_holiday = False
+    
+    if special_day:
+        is_holiday = special_day.is_holiday
+    else:
+        is_holiday = weekday >= 5 # 5=Saturday, 6=Sunday
+
+    if is_holiday:
         return []
     
     vendors = db.query(models.Vendor).filter(models.Vendor.is_active == True).all()

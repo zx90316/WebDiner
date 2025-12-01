@@ -34,6 +34,7 @@ export const CalendarOrdering: React.FC = () => {
     const [selections, setSelections] = useState<{ [date: string]: DaySelection }>({});
     const [existingOrders, setExistingOrders] = useState<{ [date: string]: any }>({});
     const [availableVendors, setAvailableVendors] = useState<{ [date: string]: VendorWithMenu[] }>({});
+    const [specialDays, setSpecialDays] = useState<{ [date: string]: boolean }>({});
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const { token } = useAuth();
@@ -42,6 +43,10 @@ export const CalendarOrdering: React.FC = () => {
     useEffect(() => {
         loadExistingOrders();
     }, [currentMonth]);
+
+    useEffect(() => {
+        loadSpecialDays();
+    }, []);
 
     const getCalendarDays = () => {
         const year = currentMonth.getFullYear();
@@ -92,6 +97,19 @@ export const CalendarOrdering: React.FC = () => {
         }
     };
 
+    const loadSpecialDays = async () => {
+        try {
+            const days = await api.get("/orders/special_days", token!);
+            const map: { [date: string]: boolean } = {};
+            days.forEach((d: any) => {
+                map[d.date] = d.is_holiday;
+            });
+            setSpecialDays(map);
+        } catch (error) {
+            console.error("Failed to load special days");
+        }
+    };
+
     const loadVendorsForDate = async (date: string) => {
         if (availableVendors[date]) return;
 
@@ -104,32 +122,19 @@ export const CalendarOrdering: React.FC = () => {
         }
     };
 
-    const selectVendor = (date: string, vendorId: number, vendorName: string) => {
-        const vendors = availableVendors[date] || [];
-        const vendor = vendors.find((v) => v.vendor.id === vendorId);
-
-        if (!vendor || vendor.menu_items.length === 0) {
-            showToast("此廠商在該日期沒有可用品項", "error");
-            return;
-        }
-
-        const firstItem = vendor.menu_items[0];
-
-        setSelections((prev) => {
-            const newSelections = {
-                ...prev,
-                [date]: {
-                    date,
-                    vendor_id: vendorId,
-                    vendor_menu_item_id: firstItem.id,
-                    vendor_name: vendorName,
-                    vendor_color: vendor.vendor.color,
-                    item_name: firstItem.name,
-                    is_no_order: false,
-                },
-            };
-            return newSelections;
-        });
+    const selectItem = (date: string, vendorId: number, vendorName: string, itemId: number, itemName: string, vendorColor: string) => {
+        setSelections((prev) => ({
+            ...prev,
+            [date]: {
+                date,
+                vendor_id: vendorId,
+                vendor_menu_item_id: itemId,
+                vendor_name: vendorName,
+                vendor_color: vendorColor,
+                item_name: itemName,
+                is_no_order: false,
+            },
+        }));
     };
 
     const selectNoOrder = (date: string) => {
@@ -142,6 +147,14 @@ export const CalendarOrdering: React.FC = () => {
                 is_no_order: true,
             },
         }));
+    };
+
+    const closeVendorSelection = (date: string) => {
+        setAvailableVendors((prev) => {
+            const newVendors = { ...prev };
+            delete newVendors[date];
+            return newVendors;
+        });
     };
 
     // --- Batch Operations ---
@@ -316,72 +329,6 @@ export const CalendarOrdering: React.FC = () => {
         showToast(`已套用週範本到未來一年 ${count} 天`, "success");
     };
 
-    const applyMonthPatternToYear = () => {
-        // Combine existing orders and selections to form the "Month Template"
-        // We map by "Day of Month" (1st, 2nd, 3rd...)
-        const pattern: { [dayOfMonth: number]: DaySelection | any } = {};
-
-        // 1. Load from existing orders
-        Object.values(existingOrders).forEach((order: any) => {
-            const date = new Date(order.order_date);
-            // Convert order to selection-like object if needed, or just store essential info
-            // Since we need to create NEW selections, we need vendor_id etc.
-            // But existingOrders might not have all IDs if the API didn't return them? 
-            // The API returns vendor_id and vendor_menu_item_id.
-            if (date.getMonth() === currentMonth.getMonth()) {
-                pattern[date.getDate()] = {
-                    vendor_id: order.vendor_id,
-                    vendor_menu_item_id: order.vendor_menu_item_id,
-                    vendor_name: order.vendor_name,
-                    item_name: order.menu_item_name,
-                    is_no_order: order.status === "NoOrder"
-                };
-            }
-        });
-
-        // 2. Override with current selections
-        Object.values(selections).forEach(sel => {
-            const date = new Date(sel.date);
-            if (date.getMonth() === currentMonth.getMonth()) {
-                pattern[date.getDate()] = sel;
-            }
-        });
-
-        if (Object.keys(pattern).length === 0) {
-            showToast("本月尚無任何訂單或選擇可供複製", "error");
-            return;
-        }
-
-        const startYear = currentMonth.getFullYear();
-        const startMonth = currentMonth.getMonth();
-        const newSelections = { ...selections };
-        let count = 0;
-
-        // Iterate through next 12 months
-        for (let i = 1; i < 12; i++) { // Start from i=1 to skip current month
-            const targetDate = new Date(startYear, startMonth + i, 1);
-            const y = targetDate.getFullYear();
-            const m = targetDate.getMonth();
-            const daysInMonth = new Date(y, m + 1, 0).getDate();
-
-            for (let d = 1; d <= daysInMonth; d++) {
-                const template = pattern[d];
-                if (!template) continue;
-
-                const date = new Date(y, m, d);
-                const dateStr = formatDate(date);
-
-                if (isDatePast(date) || isWeekend(date) || existingOrders[dateStr]) continue;
-
-                newSelections[dateStr] = { ...template, date: dateStr };
-                count++;
-            }
-        }
-
-        setSelections(newSelections);
-        showToast(`已套用月範本到未來一年 ${count} 天`, "success");
-    };
-
     const [clearRange, setClearRange] = useState<{ start: string, end: string }>({ start: "", end: "" });
     const [showClearModal, setShowClearModal] = useState(false);
 
@@ -447,7 +394,13 @@ export const CalendarOrdering: React.FC = () => {
         return false;
     };
 
-    const isWeekend = (date: Date) => date.getDay() === 0 || date.getDay() === 6;
+    const isWeekend = (date: Date) => {
+        const dateStr = formatDate(date);
+        if (specialDays[dateStr] !== undefined) {
+            return specialDays[dateStr];
+        }
+        return date.getDay() === 0 || date.getDay() === 6;
+    };
 
     const clearSelection = (date: string) => {
         setSelections((prev) => {
@@ -559,9 +512,6 @@ export const CalendarOrdering: React.FC = () => {
                     <button onClick={applyWeekPatternToYear} className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded hover:bg-purple-100">
                         本週設定 → 全年
                     </button>
-                    <button onClick={applyMonthPatternToYear} className="text-xs bg-pink-50 text-pink-600 px-2 py-1 rounded hover:bg-pink-100">
-                        本月設定 → 全年
-                    </button>
                 </div>
 
 
@@ -628,22 +578,28 @@ export const CalendarOrdering: React.FC = () => {
                                 }
                             }
 
-                            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                            const isDayWeekend = isWeekend(day);
                             const hasOrder = existingOrders[dateStr];
                             const hasSelection = selections[dateStr];
                             const vendors = availableVendors[dateStr] || [];
 
                             // Find vendor color for existing order
                             let existingOrderColor = "#10B981"; // Default green
-                            let existingOrderBg = "#ECFDF5"; // Default green-50
+                            let existingOrderBg = "#ffffffff"; // Default green-50
                             let existingOrderBorder = "#34D399"; // Default green-400
 
-                            if (hasOrder && availableVendors[dateStr]) {
-                                const vendor = availableVendors[dateStr].find(v => v.vendor.id === hasOrder.vendor_id);
-                                if (vendor && vendor.vendor.color) {
-                                    existingOrderColor = vendor.vendor.color;
-                                    existingOrderBg = `${vendor.vendor.color}1A`; // 10% opacity
-                                    existingOrderBorder = vendor.vendor.color;
+                            if (hasOrder) {
+                                if (hasOrder.vendor_color) {
+                                    existingOrderColor = hasOrder.vendor_color;
+                                    existingOrderBg = existingOrderBg; // 10% opacity
+                                    existingOrderBorder = hasOrder.vendor_color;
+                                } else if (availableVendors[dateStr]) {
+                                    const vendor = availableVendors[dateStr].find(v => v.vendor.id === hasOrder.vendor_id);
+                                    if (vendor && vendor.vendor.color) {
+                                        existingOrderColor = vendor.vendor.color;
+                                        existingOrderBg = `${vendor.vendor.color}1A`; // 10% opacity
+                                        existingOrderBorder = vendor.vendor.color;
+                                    }
                                 }
                             }
 
@@ -659,7 +615,7 @@ export const CalendarOrdering: React.FC = () => {
                             }
 
                             // Can modify order if not past cutoff
-                            const canModify = !isPast && !isWeekend;
+                            const canModify = !isPast && !isDayWeekend;
 
                             return (
                                 <div
@@ -670,7 +626,7 @@ export const CalendarOrdering: React.FC = () => {
                                             ? { backgroundColor: selectionBg, borderColor: selectionBorder }
                                             : {}
                                     }
-                                    className={`aspect-square border rounded-lg p-2 cursor-pointer transition ${isPast || isWeekend
+                                    className={`aspect-square border rounded-lg p-2 cursor-pointer transition ${isPast || isDayWeekend
                                         ? "bg-gray-200 opacity-50 cursor-not-allowed"
                                         : hasOrder
                                             ? "" // Style handled by inline style
@@ -678,12 +634,12 @@ export const CalendarOrdering: React.FC = () => {
                                                 ? "" // Style handled by inline style
                                                 : "bg-white hover:shadow-lg hover:border-blue-300"
                                         }`}
-                                    onClick={() => !isPast && !isWeekend && !hasOrder && loadVendorsForDate(dateStr)}
+                                    onClick={() => !isPast && !isDayWeekend && !hasOrder && loadVendorsForDate(dateStr)}
                                 >
                                     <div className="text-sm font-bold mb-1">{day.getDate()}</div>
 
-                                    {isWeekend && <p className="text-xs text-gray-500">週末</p>}
-                                    {isPast && !isWeekend && <p className="text-xs text-gray-500">已過期</p>}
+                                    {isDayWeekend && <p className="text-xs text-gray-500">週末</p>}
+                                    {isPast && !isDayWeekend && <p className="text-xs text-gray-500">已過期</p>}
 
                                     {/* Existing Order */}
                                     {hasOrder && (
@@ -736,8 +692,8 @@ export const CalendarOrdering: React.FC = () => {
                                     )}
 
                                     {/* Vendor Selection */}
-                                    {!hasOrder && !hasSelection && !isPast && !isWeekend && vendors.length > 0 && (
-                                        <div className="text-xs space-y-1 mt-1 scrollbar-hide">
+                                    {!hasOrder && !hasSelection && !isPast && !isDayWeekend && vendors.length > 0 && (
+                                        <div className="text-xs grid grid-cols-2 gap-1 mt-1 scrollbar-hide">
                                             {/* No Order Button */}
                                             <button
                                                 onClick={(e) => {
@@ -749,32 +705,38 @@ export const CalendarOrdering: React.FC = () => {
                                                 <div className="font-bold text-xs">今天不訂餐</div>
                                             </button>
 
-                                            {vendors.map((v) => (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    closeVendorSelection(dateStr);
+                                                }}
+                                                className="w-full text-left p-1.5 bg-gray-100 border border-gray-200 text-gray-600 rounded hover:bg-gray-200 transition-all shadow-sm"
+                                            >
+                                                <div className="font-bold text-xs text-center">取消</div>
+                                            </button>
+
+                                            {vendors.flatMap(v => v.menu_items.map(item => ({ vendor: v.vendor, item }))).map(({ vendor, item }) => (
                                                 <button
-                                                    key={v.vendor.id}
+                                                    key={`${vendor.id}-${item.id}`}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        selectVendor(dateStr, v.vendor.id, v.vendor.name);
+                                                        selectItem(dateStr, vendor.id, vendor.name, item.id, item.name, vendor.color);
                                                     }}
                                                     className="w-full text-left p-1.5 bg-white border text-gray-800 rounded hover:opacity-80 transition-all shadow-sm group"
-                                                    style={{ borderColor: v.vendor.color || '#BFDBFE' }}
+                                                    style={{ borderColor: vendor.color || '#BFDBFE' }}
                                                 >
                                                     <div className="font-bold truncate text-gray-600">
-                                                        {v.vendor.name} ({v.menu_items[0].name})
+                                                        {item.name}
                                                     </div>
-                                                    {v.menu_items[0] && (
-                                                        <div className="flex justify-between items-center mt-0.5">
-                                                            <span className="text-[10px] text-gray-500 truncate flex-1">
-
-                                                            </span>
-                                                        </div>
-                                                    )}
+                                                    <div className="text-[10px] text-gray-500 truncate">
+                                                        {vendor.name}
+                                                    </div>
                                                 </button>
                                             ))}
                                         </div>
                                     )}
 
-                                    {!hasOrder && !hasSelection && !isPast && !isWeekend && vendors.length === 0 && (
+                                    {!hasOrder && !hasSelection && !isPast && !isDayWeekend && vendors.length === 0 && (
                                         <p className="text-xs text-gray-400">點擊載入</p>
                                     )}
                                 </div>

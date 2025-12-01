@@ -19,7 +19,7 @@ interface VendorMenuItem {
     is_active: boolean;
 }
 
-const WEEKDAYS = ["週一", "週二", "週三", "週四", "週五"];
+const WEEKDAYS = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"];
 
 export const VendorMenuEditor: React.FC = () => {
     const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -213,7 +213,7 @@ export const VendorMenuEditor: React.FC = () => {
                             <option value="">每天供應</option>
                             {WEEKDAYS.map((day, index) => (
                                 <option key={index} value={index}>
-                                    僅{day}
+                                    {day}
                                 </option>
                             ))}
                         </select>

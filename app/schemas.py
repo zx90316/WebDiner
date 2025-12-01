@@ -11,6 +11,19 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    department_id: Optional[int] = None
+    role: Optional[str] = "user"
+
+class UserUpdate(BaseModel):
+    employee_id: Optional[str] = None
+    name: Optional[str] = None
+    extension: Optional[str] = None
+    email: Optional[EmailStr] = None
+    department_id: Optional[int] = None
+    password: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+    role: Optional[str] = None
 
 class UserLogin(BaseModel):
     employee_id: str
@@ -20,6 +33,8 @@ class User(UserBase):
     id: int
     is_active: bool
     is_admin: bool
+    role: Optional[str] = "user"
+    department_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -30,6 +45,20 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+# Department Schemas
+class DepartmentBase(BaseModel):
+    name: str
+    is_active: bool = True
+
+class DepartmentCreate(DepartmentBase):
+    pass
+
+class Department(DepartmentBase):
+    id: int
+
+    class Config:
+        from_attributes = True
 
 # Vendor Schemas
 class VendorBase(BaseModel):
@@ -98,6 +127,13 @@ class OrderBatchCreate(BaseModel):
     """For creating multiple orders at once"""
     orders: List[OrderCreate]
 
+class UserOrderUpdate(BaseModel):
+    user_id: int
+    order_date: date
+    vendor_id: Optional[int] = None
+    item_id: Optional[int] = None
+    is_cancel: bool = False
+
 class Order(BaseModel):
     id: int
     user_id: int
@@ -116,3 +152,17 @@ class OrderWithDetails(Order):
     vendor_color: Optional[str] = None
     menu_item_name: Optional[str] = None
     menu_item_price: Optional[int] = None
+
+# Special Day Schemas
+class SpecialDayBase(BaseModel):
+    date: date
+    is_holiday: bool
+    description: Optional[str] = None
+
+class SpecialDayCreate(SpecialDayBase):
+    pass
+
+class SpecialDay(SpecialDayBase):
+    id: int
+    class Config:
+        from_attributes = True

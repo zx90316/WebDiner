@@ -7,17 +7,18 @@ import { Loading } from "../../components/Loading";
 export const StatsView: React.FC = () => {
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const { token } = useAuth();
     const { showToast } = useToast();
 
     useEffect(() => {
         loadStats();
-    }, []);
+    }, [selectedDate]);
 
     const loadStats = async () => {
         try {
             setLoading(true);
-            const data = await api.get("/admin/stats/today", token!);
+            const data = await api.get(`/admin/stats?date=${selectedDate}`, token!);
             setStats(data);
         } catch (error) {
             showToast("載入統計資料失敗", "error");
@@ -26,56 +27,83 @@ export const StatsView: React.FC = () => {
         }
     };
 
-    if (loading) return <Loading />;
-    if (!stats) return <div className="text-center text-gray-500">無法載入統計資料</div>;
+    const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setSelectedDate(e.target.value);
+    };
+
+    if (loading && !stats) return <Loading />;
 
     return (
         <div className="bg-white p-6 rounded-lg shadow">
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">今日統計 ({stats.date})</h2>
-                <button
-                    onClick={loadStats}
-                    className="text-blue-600 hover:text-blue-800 text-sm"
-                >
-                    重新整理
-                </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg border border-blue-200">
-                    <h3 className="text-gray-600 text-sm font-medium mb-2">總訂單數</h3>
-                    <p className="text-4xl font-bold text-blue-700">{stats.total_orders}</p>
-                </div>
-                <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg border border-green-200">
-                    <h3 className="text-gray-600 text-sm font-medium mb-2">總金額</h3>
-                    <p className="text-4xl font-bold text-green-700">${stats.total_price}</p>
+            <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <h2 className="text-2xl font-bold">訂單統計</h2>
+                <div className="flex items-center gap-4">
+                    <input
+                        type="date"
+                        value={selectedDate}
+                        onChange={handleDateChange}
+                        className="border rounded px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                        onClick={loadStats}
+                        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                    >
+                        重新整理
+                    </button>
                 </div>
             </div>
 
-            <h3 className="text-xl font-bold mb-4">餐點統計</h3>
-            {Object.keys(stats.item_counts).length === 0 ? (
-                <p className="text-gray-500 text-center py-8">今日尚無訂單</p>
-            ) : (
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="bg-gray-100 border-b">
-                                <th className="text-left p-3 font-semibold">餐點名稱</th>
-                                <th className="text-right p-3 font-semibold">數量</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {Object.entries(stats.item_counts)
-                                .sort((a: any, b: any) => b[1] - a[1])
-                                .map(([name, count]: [string, any]) => (
-                                    <tr key={name} className="border-b hover:bg-gray-50">
-                                        <td className="p-3">{name}</td>
-                                        <td className="p-3 text-right font-medium">{count}</td>
-                                    </tr>
-                                ))}
-                        </tbody>
-                    </table>
-                </div>
+            {stats && (
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg border border-blue-200">
+                            <h3 className="text-gray-600 text-sm font-medium mb-2">總訂單數</h3>
+                            <p className="text-4xl font-bold text-blue-700">{stats.total_orders}</p>
+                        </div>
+                        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg border border-green-200">
+                            <h3 className="text-gray-600 text-sm font-medium mb-2">總金額</h3>
+                            <p className="text-4xl font-bold text-green-700">${stats.total_price}</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-8">
+                        {stats.vendors.length === 0 ? (
+                            <p className="text-gray-500 text-center py-8">此日期尚無訂單</p>
+                        ) : (
+                            stats.vendors.map((vendor: any) => (
+                                <div key={vendor.name} className="border rounded-lg overflow-hidden">
+                                    <div className="bg-gray-50 p-4 border-b flex justify-between items-center">
+                                        <h3 className="text-lg font-bold text-gray-800">{vendor.name}</h3>
+                                        <div className="text-sm text-gray-600">
+                                            <span className="mr-4">數量: {vendor.total_orders}</span>
+                                            <span className="font-bold text-green-700">總額: ${vendor.total_price}</span>
+                                        </div>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="bg-white border-b text-sm text-gray-500">
+                                                    <th className="text-left p-3 font-medium">品項</th>
+                                                    <th className="text-right p-3 font-medium">數量</th>
+                                                    <th className="text-right p-3 font-medium">小計</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {vendor.items.map((item: any) => (
+                                                    <tr key={item.name} className="border-b last:border-0 hover:bg-gray-50">
+                                                        <td className="p-3 text-gray-800">{item.name}</td>
+                                                        <td className="p-3 text-right font-medium">{item.count}</td>
+                                                        <td className="p-3 text-right text-gray-600">${item.subtotal}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </>
             )}
         </div>
     );
