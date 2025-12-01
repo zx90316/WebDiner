@@ -8,6 +8,7 @@ interface Division {
     id: number;
     name: string;
     is_active: boolean;
+    display_order: number;
 }
 
 interface Department {
@@ -47,8 +48,8 @@ export const DepartmentManager: React.FC = () => {
     });
 
     // 新增/編輯處別表單
-    const [newDivisionName, setNewDivisionName] = useState("");
-    const [editDivisionName, setEditDivisionName] = useState("");
+    const [newDivision, setNewDivision] = useState({ name: "", display_order: 0 });
+    const [editDivision, setEditDivision] = useState({ name: "", display_order: 0 });
 
     useEffect(() => {
         loadData();
@@ -132,15 +133,15 @@ export const DepartmentManager: React.FC = () => {
     // 處別 CRUD
     const handleDivisionSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newDivisionName.trim()) {
+        if (!newDivision.name.trim()) {
             showToast("請輸入處別名稱", "error");
             return;
         }
         try {
             setSubmitting(true);
-            await api.post("/admin/divisions", { name: newDivisionName }, token!);
+            await api.post("/admin/divisions", newDivision, token!);
             showToast("處別已新增", "success");
-            setNewDivisionName("");
+            setNewDivision({ name: "", display_order: 0 });
             loadData();
         } catch (error: any) {
             showToast(error.message || "操作失敗", "error");
@@ -151,17 +152,17 @@ export const DepartmentManager: React.FC = () => {
 
     const handleDivisionEdit = (division: Division) => {
         setDivisionEditingId(division.id);
-        setEditDivisionName(division.name);
+        setEditDivision({ name: division.name, display_order: division.display_order || 0 });
     };
 
     const handleDivisionUpdate = async () => {
-        if (!editDivisionName.trim()) {
+        if (!editDivision.name.trim()) {
             showToast("處別名稱不可為空", "error");
             return;
         }
         try {
             setSubmitting(true);
-            await api.put(`/admin/divisions/${divisionEditingId}`, { name: editDivisionName }, token!);
+            await api.put(`/admin/divisions/${divisionEditingId}`, editDivision, token!);
             showToast("處別已更新", "success");
             setDivisionEditingId(null);
             loadData();
@@ -188,21 +189,63 @@ export const DepartmentManager: React.FC = () => {
         }
     };
 
-    const getDivisionName = (divisionId: number | null) => {
-        if (!divisionId) return "未指定";
-        const div = divisions.find((d) => d.id === divisionId);
-        return div ? div.name : "未知";
+    const getDivision = (divisionId: number | null) => {
+        if (!divisionId) return null;
+        return divisions.find((d) => d.id === divisionId) || null;
     };
 
     if (loading) return <Loading />;
 
-    // 按處別分組
-    const groupedByDivision = departments.reduce((acc, dept) => {
-        const divId = dept.division_id || 0;
-        if (!acc[divId]) acc[divId] = [];
-        acc[divId].push(dept);
-        return acc;
-    }, {} as Record<number, Department[]>);
+    // 按欄位分組，再按處別分組
+    const getColumnData = () => {
+        const columns: Array<{ divisionId: number | null; divisionName: string; divisionOrder: number; departments: Department[] }[]> = [[], [], [], []];
+        
+        // 先按欄位分組
+        const deptsByColumn: Department[][] = [[], [], [], []];
+        departments.forEach(dept => {
+            const col = dept.display_column || 0;
+            if (col >= 0 && col < 4) {
+                deptsByColumn[col].push(dept);
+            }
+        });
+
+        // 每欄內按處別分組
+        for (let col = 0; col < 4; col++) {
+            const colDepts = deptsByColumn[col];
+            const divisionGroups = new Map<number | null, Department[]>();
+            
+            colDepts.forEach(dept => {
+                const divId = dept.division_id;
+                if (!divisionGroups.has(divId)) {
+                    divisionGroups.set(divId, []);
+                }
+                divisionGroups.get(divId)!.push(dept);
+            });
+
+            // 轉換為陣列並排序
+            divisionGroups.forEach((depts, divId) => {
+                depts.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+                const div = getDivision(divId);
+                columns[col].push({
+                    divisionId: divId,
+                    divisionName: div?.name || "未分類",
+                    divisionOrder: div?.display_order ?? 999,
+                    departments: depts,
+                });
+            });
+
+            // 處別排序：按 display_order 排序，未分類的放最後
+            columns[col].sort((a, b) => {
+                if (a.divisionId === null) return 1;
+                if (b.divisionId === null) return -1;
+                return a.divisionOrder - b.divisionOrder;
+            });
+        }
+
+        return columns;
+    };
+
+    const columnData = getColumnData();
 
     return (
         <div className="space-y-6">
@@ -224,7 +267,6 @@ export const DepartmentManager: React.FC = () => {
 
                 {showDivisionSection && (
                     <div className="p-6 border-t space-y-4">
-                        {/* 新增處別表單 */}
                         <form onSubmit={handleDivisionSubmit} className="flex gap-3 items-end bg-gray-50 p-4 rounded-lg">
                             <div className="flex-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">處別名稱</label>
@@ -232,8 +274,18 @@ export const DepartmentManager: React.FC = () => {
                                     type="text"
                                     placeholder="例如：管理處、技術處"
                                     className="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500"
-                                    value={newDivisionName}
-                                    onChange={(e) => setNewDivisionName(e.target.value)}
+                                    value={newDivision.name}
+                                    onChange={(e) => setNewDivision({ ...newDivision, name: e.target.value })}
+                                />
+                            </div>
+                            <div className="w-20">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">排序</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    className="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500"
+                                    value={newDivision.display_order}
+                                    onChange={(e) => setNewDivision({ ...newDivision, display_order: parseInt(e.target.value) || 0 })}
                                 />
                             </div>
                             <LoadingButton
@@ -245,9 +297,12 @@ export const DepartmentManager: React.FC = () => {
                             </LoadingButton>
                         </form>
 
-                        {/* 處別列表 */}
+                        <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                            💡 排序數字越小，在同一欄內顯示越靠前（例如：車輛安全審驗中心=0, 管理處=1）
+                        </div>
+
                         <div className="flex flex-wrap gap-2">
-                            {divisions.map((division) => {
+                            {[...divisions].sort((a, b) => (a.display_order || 0) - (b.display_order || 0)).map((division) => {
                                 const deptCount = departments.filter(d => d.division_id === division.id).length;
                                 return (
                                     <div key={division.id} className="bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 flex items-center gap-2">
@@ -255,49 +310,34 @@ export const DepartmentManager: React.FC = () => {
                                             <>
                                                 <input
                                                     type="text"
-                                                    className="w-32 p-1 border rounded text-sm"
-                                                    value={editDivisionName}
-                                                    onChange={(e) => setEditDivisionName(e.target.value)}
+                                                    className="w-28 p-1 border rounded text-sm"
+                                                    value={editDivision.name}
+                                                    onChange={(e) => setEditDivision({ ...editDivision, name: e.target.value })}
                                                     autoFocus
                                                 />
-                                                <button
-                                                    onClick={handleDivisionUpdate}
-                                                    disabled={submitting}
-                                                    className="text-indigo-600 hover:text-indigo-800 text-sm"
-                                                >
-                                                    ✓
-                                                </button>
-                                                <button
-                                                    onClick={() => setDivisionEditingId(null)}
-                                                    className="text-gray-500 hover:text-gray-700 text-sm"
-                                                >
-                                                    ✕
-                                                </button>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    className="w-12 p-1 border rounded text-sm"
+                                                    value={editDivision.display_order}
+                                                    onChange={(e) => setEditDivision({ ...editDivision, display_order: parseInt(e.target.value) || 0 })}
+                                                />
+                                                <button onClick={handleDivisionUpdate} disabled={submitting} className="text-indigo-600 hover:text-indigo-800 text-sm">✓</button>
+                                                <button onClick={() => setDivisionEditingId(null)} className="text-gray-500 hover:text-gray-700 text-sm">✕</button>
                                             </>
                                         ) : (
                                             <>
+                                                <span className="text-xs bg-indigo-200 text-indigo-700 px-1.5 py-0.5 rounded font-mono">#{division.display_order || 0}</span>
                                                 <span className="font-medium text-indigo-800">{division.name}</span>
                                                 <span className="text-xs text-gray-500">({deptCount})</span>
-                                                <button
-                                                    onClick={() => handleDivisionEdit(division)}
-                                                    className="text-indigo-600 hover:text-indigo-800 text-xs ml-1"
-                                                >
-                                                    編輯
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDivisionDelete(division.id, division.name)}
-                                                    className="text-red-500 hover:text-red-700 text-xs"
-                                                >
-                                                    刪除
-                                                </button>
+                                                <button onClick={() => handleDivisionEdit(division)} className="text-indigo-600 hover:text-indigo-800 text-xs ml-1">編輯</button>
+                                                <button onClick={() => handleDivisionDelete(division.id, division.name)} className="text-red-500 hover:text-red-700 text-xs">刪除</button>
                                             </>
                                         )}
                                     </div>
                                 );
                             })}
-                            {divisions.length === 0 && (
-                                <div className="text-gray-500 py-2">尚無處別資料，請先新增處別</div>
-                            )}
+                            {divisions.length === 0 && <div className="text-gray-500 py-2">尚無處別資料，請先新增處別</div>}
                         </div>
                     </div>
                 )}
@@ -363,135 +403,144 @@ export const DepartmentManager: React.FC = () => {
                 </form>
             </div>
 
-            {/* 部門列表 - 按處別分組 */}
+            {/* 部門列表 - 分機表預覽佈局 */}
             <div className="bg-white p-6 rounded-lg shadow">
-                <h2 className="text-xl font-bold mb-4">部門列表</h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold">📞 分機表佈局預覽</h2>
+                    <p className="text-sm text-gray-500">共 {departments.length} 個部門</p>
+                </div>
                 
-                {/* 未分配處別的部門 */}
-                {groupedByDivision[0] && groupedByDivision[0].length > 0 && (
-                    <div className="mb-6">
-                        <h3 className="font-semibold text-orange-600 mb-3 pb-2 border-b border-orange-200 flex items-center gap-2">
-                            <span className="bg-orange-100 px-2 py-1 rounded">⚠️ 未指定處別</span>
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {groupedByDivision[0].map((dept) => renderDeptCard(dept))}
-                        </div>
-                    </div>
-                )}
+                {/* 4欄佈局 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    {columnData.map((column, colIndex) => (
+                        <div key={colIndex} className="space-y-3">
+                            {/* 欄位標題 */}
+                            <div className="bg-gray-100 rounded-lg px-3 py-2 text-center">
+                                <span className="font-bold text-gray-600">第 {colIndex + 1} 欄</span>
+                                <span className="text-xs text-gray-400 ml-2">
+                                    ({column.reduce((sum, g) => sum + g.departments.length, 0)} 個部門)
+                                </span>
+                            </div>
 
-                {/* 按處別分組顯示 */}
-                {divisions.map((division) => {
-                    const depts = groupedByDivision[division.id] || [];
-                    return (
-                        <div key={division.id} className="mb-6">
-                            <h3 className="font-semibold text-gray-700 mb-3 pb-2 border-b flex items-center gap-2">
-                                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">{division.name}</span>
-                                <span className="text-sm text-gray-500">({depts.length} 個部門)</span>
-                            </h3>
-                            {depts.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {depts.sort((a, b) => (a.display_order || 0) - (b.display_order || 0)).map((dept) => renderDeptCard(dept))}
+                            {/* 處別分組 */}
+                            {column.map((group, groupIdx) => (
+                                <div key={groupIdx} className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                                    {/* 處別標題 */}
+                                    <div className={`px-3 py-2 text-white font-medium ${
+                                        group.divisionId === null 
+                                            ? 'bg-orange-500' 
+                                            : 'bg-gradient-to-r from-blue-600 to-blue-700'
+                                    }`}>
+                                        {group.divisionName}
+                                    </div>
+
+                                    {/* 部門列表 */}
+                                    <div className="divide-y">
+                                        {group.departments.map((dept) => (
+                                            <div key={dept.id} className="group">
+                                                {editingId === dept.id ? (
+                                                    // 編輯模式
+                                                    <div className="p-3 bg-blue-50 space-y-2">
+                                                        <input
+                                                            type="text"
+                                                            className="w-full p-1.5 border rounded text-sm"
+                                                            value={editForm.name}
+                                                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                                            autoFocus
+                                                        />
+                                                        <div className="flex gap-2">
+                                                            <select
+                                                                className="flex-1 p-1 border rounded text-xs"
+                                                                value={editForm.division_id || ""}
+                                                                onChange={(e) => setEditForm({ ...editForm, division_id: e.target.value ? parseInt(e.target.value) : null })}
+                                                            >
+                                                                <option value="">未分類</option>
+                                                                {divisions.map((div) => (
+                                                                    <option key={div.id} value={div.id}>{div.name}</option>
+                                                                ))}
+                                                            </select>
+                                                            <select
+                                                                className="w-20 p-1 border rounded text-xs"
+                                                                value={editForm.display_column}
+                                                                onChange={(e) => setEditForm({ ...editForm, display_column: parseInt(e.target.value) })}
+                                                            >
+                                                                <option value={0}>欄1</option>
+                                                                <option value={1}>欄2</option>
+                                                                <option value={2}>欄3</option>
+                                                                <option value={3}>欄4</option>
+                                                            </select>
+                                                            <input
+                                                                type="number"
+                                                                min="0"
+                                                                className="w-14 p-1 border rounded text-xs"
+                                                                value={editForm.display_order}
+                                                                onChange={(e) => setEditForm({ ...editForm, display_order: parseInt(e.target.value) || 0 })}
+                                                                placeholder="#"
+                                                            />
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={handleUpdate}
+                                                                disabled={submitting}
+                                                                className="flex-1 bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600"
+                                                            >
+                                                                儲存
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setEditingId(null)}
+                                                                className="flex-1 bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-400"
+                                                            >
+                                                                取消
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    // 顯示模式
+                                                    <div className="px-3 py-2 hover:bg-gray-50 flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs text-gray-400 font-mono">#{dept.display_order}</span>
+                                                            <span className="font-medium text-gray-700">{dept.name}</span>
+                                                        </div>
+                                                        <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition">
+                                                            <button
+                                                                onClick={() => handleEdit(dept)}
+                                                                className="text-blue-500 hover:text-blue-700 text-xs px-1"
+                                                            >
+                                                                編輯
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(dept.id, dept.name)}
+                                                                className="text-red-500 hover:text-red-700 text-xs px-1"
+                                                            >
+                                                                刪除
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            ) : (
-                                <div className="text-gray-400 text-sm py-4">尚無部門</div>
+                            ))}
+
+                            {/* 空欄位提示 */}
+                            {column.length === 0 && (
+                                <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center text-gray-400">
+                                    <div className="text-2xl mb-2">📭</div>
+                                    <div className="text-sm">此欄尚無部門</div>
+                                </div>
                             )}
                         </div>
-                    );
-                })}
+                    ))}
+                </div>
 
-                {departments.length === 0 && <div className="text-center text-gray-500 py-8">尚無部門資料</div>}
+                {departments.length === 0 && (
+                    <div className="text-center text-gray-500 py-12">
+                        <div className="text-4xl mb-4">🏢</div>
+                        <div>尚無部門資料，請先新增部門</div>
+                    </div>
+                )}
             </div>
         </div>
     );
-
-    function renderDeptCard(dept: Department) {
-        return (
-            <div key={dept.id} className="bg-gray-50 p-4 rounded-lg border">
-                {editingId === dept.id ? (
-                    <div className="space-y-3">
-                        <input
-                            type="text"
-                            className="w-full p-2 border rounded"
-                            value={editForm.name}
-                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                        />
-                        <select
-                            className="w-full p-2 border rounded"
-                            value={editForm.division_id || ""}
-                            onChange={(e) => setEditForm({ ...editForm, division_id: e.target.value ? parseInt(e.target.value) : null })}
-                        >
-                            <option value="">-- 未指定 --</option>
-                            {divisions.map((div) => (
-                                <option key={div.id} value={div.id}>{div.name}</option>
-                            ))}
-                        </select>
-                        <div className="flex gap-2 items-center">
-                            <span className="text-sm text-gray-600">欄位:</span>
-                            <select
-                                className="flex-1 p-1 border rounded"
-                                value={editForm.display_column}
-                                onChange={(e) => setEditForm({ ...editForm, display_column: parseInt(e.target.value) })}
-                            >
-                                <option value={0}>第一欄</option>
-                                <option value={1}>第二欄</option>
-                                <option value={2}>第三欄</option>
-                                <option value={3}>第四欄</option>
-                            </select>
-                        </div>
-                        <div className="flex gap-2 items-center">
-                            <span className="text-sm text-gray-600">排序:</span>
-                            <input
-                                type="number"
-                                min="0"
-                                className="w-20 p-1 border rounded"
-                                value={editForm.display_order}
-                                onChange={(e) => setEditForm({ ...editForm, display_order: parseInt(e.target.value) || 0 })}
-                            />
-                        </div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleUpdate}
-                                disabled={submitting}
-                                className="flex-1 bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600"
-                            >
-                                儲存
-                            </button>
-                            <button
-                                onClick={() => setEditingId(null)}
-                                className="flex-1 bg-gray-300 text-gray-700 px-3 py-2 rounded hover:bg-gray-400"
-                            >
-                                取消
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div>
-                        <div className="flex justify-between items-start mb-2">
-                            <div className="font-medium text-lg">{dept.name}</div>
-                            <div className="flex gap-1">
-                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">欄{(dept.display_column || 0) + 1}</span>
-                                <span className="text-xs bg-gray-200 px-2 py-1 rounded">#{dept.display_order || 0}</span>
-                            </div>
-                        </div>
-                        <div className="text-sm text-gray-500 mb-3">處別: {getDivisionName(dept.division_id)}</div>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => handleEdit(dept)}
-                                className="flex-1 text-blue-600 hover:text-blue-800 text-sm border border-blue-300 rounded px-3 py-1 hover:bg-blue-50"
-                            >
-                                編輯
-                            </button>
-                            <button
-                                onClick={() => handleDelete(dept.id, dept.name)}
-                                className="flex-1 text-red-600 hover:text-red-800 text-sm border border-red-300 rounded px-3 py-1 hover:bg-red-50"
-                            >
-                                刪除
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    }
 };
-

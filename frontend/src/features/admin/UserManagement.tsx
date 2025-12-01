@@ -349,9 +349,6 @@ export const UserManagement: React.FC = () => {
                             <tr key={user.id} className="border-b hover:bg-gray-50">
                                 <td className="p-3 font-medium">{user.employee_id}</td>
                                 <td className="p-3">
-                                    {user.is_department_head && (
-                                        <span className="text-amber-500 mr-1" title="部門主管">⭐</span>
-                                    )}
                                     {user.name}
                                 </td>
                                 <td className="p-3">{user.title || "-"}</td>
