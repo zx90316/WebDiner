@@ -20,6 +20,8 @@ def on_startup():
 origins = [
     "http://localhost:5173", # Vite default
     "http://127.0.0.1:5173",
+    "http://localhost:8201",
+    "http://127.0.0.1:8201",
 ]
 
 app.add_middleware(
