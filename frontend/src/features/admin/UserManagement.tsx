@@ -14,6 +14,8 @@ interface User {
     is_admin: boolean;
     role: string;
     is_active: boolean;
+    title: string | null;  // 職稱
+    is_department_head: boolean;  // 是否為部門主管
 }
 
 interface Department {
@@ -37,6 +39,8 @@ export const UserManagement: React.FC = () => {
         email: "",
         password: "",
         role: "user",
+        title: "",  // 職稱
+        is_department_head: false,  // 是否為部門主管
     });
 
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -78,8 +82,8 @@ export const UserManagement: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!formData.employee_id || !formData.name || !formData.email) {
-            showToast("請填寫必填欄位", "error");
+        if (!formData.employee_id || !formData.name) {
+            showToast("請填寫必填欄位（工號、姓名）", "error");
             return;
         }
 
@@ -89,9 +93,11 @@ export const UserManagement: React.FC = () => {
                 employee_id: formData.employee_id,
                 name: formData.name,
                 department_id: formData.department_id ? Number(formData.department_id) : null,
-                extension: formData.extension,
-                email: formData.email,
+                extension: formData.extension || null,
+                email: formData.email || null,
                 role: formData.role,
+                title: formData.title || null,
+                is_department_head: formData.is_department_head,
             };
 
             if (formData.password) {
@@ -119,6 +125,8 @@ export const UserManagement: React.FC = () => {
                 email: "",
                 password: "",
                 role: "user",
+                title: "",
+                is_department_head: false,
             });
             setEditingId(null);
             loadUsers();
@@ -141,9 +149,11 @@ export const UserManagement: React.FC = () => {
             name: user.name,
             department_id: user.department_id || "",
             extension: user.extension || "",
-            email: user.email,
+            email: user.email || "",
             password: "", // Don't fill password
             role: user.role || "user",
+            title: user.title || "",
+            is_department_head: user.is_department_head || false,
         });
         setEditingId(user.id);
     };
@@ -176,6 +186,8 @@ export const UserManagement: React.FC = () => {
             email: "",
             password: "",
             role: "user",
+            title: "",
+            is_department_head: false,
         });
         setEditingId(null);
     };
@@ -235,16 +247,34 @@ export const UserManagement: React.FC = () => {
                         />
                     </div>
                     <div>
-                        <label className="block text-gray-700 mb-2 font-medium">
-                            Email <span className="text-red-500">*</span>
-                        </label>
+                        <label className="block text-gray-700 mb-2 font-medium">職稱</label>
+                        <input
+                            className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="例如：經理、副理、主任"
+                            value={formData.title}
+                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-gray-700 mb-2 font-medium">Email</label>
                         <input
                             type="email"
                             className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                            required
                         />
+                    </div>
+                    <div className="flex items-center">
+                        <label className="flex items-center cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                checked={formData.is_department_head}
+                                onChange={(e) => setFormData({ ...formData, is_department_head: e.target.checked })}
+                            />
+                            <span className="ml-2 text-gray-700 font-medium">部門主管</span>
+                        </label>
+                        <span className="ml-2 text-gray-500 text-sm">（在分機表中優先顯示）</span>
                     </div>
                     {/* Password Field - Visible if creating new user OR if SysAdmin */}
                     {(!editingId || isSysAdmin) && (
@@ -306,6 +336,7 @@ export const UserManagement: React.FC = () => {
                         <tr className="bg-gray-100 border-b">
                             <th className="text-left p-3 font-semibold">工號</th>
                             <th className="text-left p-3 font-semibold">姓名</th>
+                            <th className="text-left p-3 font-semibold">職稱</th>
                             <th className="text-left p-3 font-semibold">部門</th>
                             <th className="text-left p-3 font-semibold">分機</th>
                             <th className="text-left p-3 font-semibold">Email</th>
@@ -317,10 +348,16 @@ export const UserManagement: React.FC = () => {
                         {users.map((user) => (
                             <tr key={user.id} className="border-b hover:bg-gray-50">
                                 <td className="p-3 font-medium">{user.employee_id}</td>
-                                <td className="p-3">{user.name}</td>
+                                <td className="p-3">
+                                    {user.is_department_head && (
+                                        <span className="text-amber-500 mr-1" title="部門主管">⭐</span>
+                                    )}
+                                    {user.name}
+                                </td>
+                                <td className="p-3">{user.title || "-"}</td>
                                 <td className="p-3">{departments.find(d => d.id === user.department_id)?.name || "-"}</td>
                                 <td className="p-3">{user.extension || "-"}</td>
-                                <td className="p-3">{user.email}</td>
+                                <td className="p-3">{user.email || "-"}</td>
                                 <td className="p-3 text-center">
                                     {user.role === "sysadmin" ? (
                                         <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">

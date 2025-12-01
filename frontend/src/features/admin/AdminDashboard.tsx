@@ -20,7 +20,6 @@ export const AdminDashboard: React.FC = () => {
         { id: "orders", name: "人員訂餐設定", icon: "📅" },
         { id: "holidays", name: "節假日管理", icon: "🗓️" },
         { id: "stats", name: "統計資料", icon: "📊" },
-
         { id: "reminders", name: "訂餐提醒", icon: "📧" },
     ];
 
@@ -54,7 +53,6 @@ export const AdminDashboard: React.FC = () => {
                         {activeTab === "orders" && <UserOrderingSettings />}
                         {activeTab === "holidays" && <HolidayManager />}
                         {activeTab === "stats" && <StatsView />}
-
                         {activeTab === "reminders" && <RemindersView />}
                     </div>
                 </div>

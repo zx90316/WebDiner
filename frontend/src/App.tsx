@@ -5,6 +5,7 @@ import { CalendarOrdering } from "./features/orders/CalendarOrdering";
 import { ChangePassword } from "./features/auth/ChangePassword";
 import { AdminDashboard } from "./features/admin/AdminDashboard";
 import { MyOrders } from "./features/orders/MyOrders";
+import { ExtensionDirectory } from "./features/extension-table/ExtensionDirectory";
 import { ToastProvider } from "./components/Toast";
 import { Navbar } from "./components/Navbar";
 import { Loading } from "./components/Loading";
@@ -27,6 +28,8 @@ function App() {
           <Navbar />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            {/* 分機表 - 公開存取 */}
+            <Route path="/extension-directory" element={<ExtensionDirectory />} />
             <Route
               path="/"
               element={

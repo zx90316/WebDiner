@@ -8,6 +8,7 @@ interface User {
     email: string;
     is_admin: boolean;
     is_active: boolean;
+    role?: string;  // user, admin, sysadmin
 }
 
 interface AuthContextType {

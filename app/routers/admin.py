@@ -6,7 +6,7 @@ from datetime import date, datetime
 import json
 from .. import models, schemas, database
 from .auth import get_current_user, get_password_hash
-from ..models import User, Department, Vendor, VendorMenuItem, SpecialDay
+from ..models import User, Department, Division, Vendor, VendorMenuItem, SpecialDay
 
 router = APIRouter(
     prefix="/admin",
@@ -149,7 +149,7 @@ def send_reminders(target_date: date = date.today(), db: Session = Depends(get_d
 
 # User Management Endpoints
 @router.get("/users", response_model=List[schemas.User])
-def get_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+def get_users(skip: int = 0, limit: int = 200, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
     users = db.query(models.User).offset(skip).limit(limit).all()
     return users
 
@@ -177,7 +177,9 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current
         department_id=user.department_id,
         hashed_password=hashed_password,
         role=user.role,
-        is_admin=(user.role in ["admin", "sysadmin"]) # Keep backward compatibility
+        is_admin=(user.role in ["admin", "sysadmin"]), # Keep backward compatibility
+        title=user.title,  # 職稱
+        is_department_head=user.is_department_head  # 是否為部門主管
     )
     db.add(new_user)
     db.commit()
@@ -235,25 +237,161 @@ def delete_user(user_id: int, db: Session = Depends(get_db), current_user: model
     db.commit()
     return {"message": "User deleted"}
 
-# Department Management Endpoints
-@router.get("/departments", response_model=List[schemas.Department])
-def get_departments(db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
-    return db.query(models.Department).filter(models.Department.is_active == True).all()
+# ========== Division (處別) Management Endpoints ==========
 
-@router.post("/departments", response_model=schemas.Department)
-def create_department(dept: schemas.DepartmentCreate, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
-    existing = db.query(models.Department).filter(models.Department.name == dept.name).first()
+@router.get("/divisions", response_model=List[schemas.Division])
+def get_divisions(db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+    """取得所有處別列表"""
+    return db.query(models.Division).filter(models.Division.is_active == True).order_by(
+        models.Division.display_column,
+        models.Division.display_order
+    ).all()
+
+@router.get("/divisions/{division_id}", response_model=schemas.DivisionWithDepartments)
+def get_division_with_departments(division_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+    """取得處別及其所屬部門"""
+    division = db.query(models.Division).filter(models.Division.id == division_id).first()
+    if not division:
+        raise HTTPException(status_code=404, detail="Division not found")
+    
+    departments = db.query(models.Department).filter(
+        models.Department.division_id == division_id,
+        models.Department.is_active == True
+    ).order_by(models.Department.display_order).all()
+    
+    return {
+        **division.__dict__,
+        "departments": departments
+    }
+
+@router.post("/divisions", response_model=schemas.Division)
+def create_division(division: schemas.DivisionCreate, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+    """新增處別"""
+    existing = db.query(models.Division).filter(models.Division.name == division.name).first()
     if existing:
+        if existing.is_active:
+            raise HTTPException(status_code=400, detail="Division already exists")
+        # Reactivate if was soft-deleted
         existing.is_active = True
+        existing.display_column = division.display_column
+        existing.display_order = division.display_order
         db.commit()
         db.refresh(existing)
         return existing
     
-    new_dept = models.Department(name=dept.name, is_active=True)
+    new_division = models.Division(
+        name=division.name,
+        is_active=True,
+        display_column=division.display_column,
+        display_order=division.display_order
+    )
+    db.add(new_division)
+    db.commit()
+    db.refresh(new_division)
+    return new_division
+
+@router.put("/divisions/{division_id}", response_model=schemas.Division)
+def update_division(
+    division_id: int,
+    division_update: schemas.DivisionUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(check_admin)
+):
+    """更新處別資訊"""
+    division = db.query(models.Division).filter(models.Division.id == division_id).first()
+    if not division:
+        raise HTTPException(status_code=404, detail="Division not found")
+    
+    update_data = division_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(division, key, value)
+    
+    db.commit()
+    db.refresh(division)
+    return division
+
+@router.delete("/divisions/{division_id}")
+def delete_division(division_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+    """刪除處別（軟刪除）"""
+    division = db.query(models.Division).filter(models.Division.id == division_id).first()
+    if not division:
+        raise HTTPException(status_code=404, detail="Division not found")
+    
+    # Check if there are departments under this division
+    dept_count = db.query(models.Department).filter(
+        models.Department.division_id == division_id,
+        models.Department.is_active == True
+    ).count()
+    
+    if dept_count > 0:
+        raise HTTPException(status_code=400, detail=f"Cannot delete division with {dept_count} active departments")
+    
+    division.is_active = False
+    db.commit()
+    return {"message": "Division deleted"}
+
+# ========== Department (部門) Management Endpoints ==========
+
+@router.get("/departments", response_model=List[schemas.Department])
+def get_departments(db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+    """取得所有部門列表"""
+    return db.query(models.Department).filter(models.Department.is_active == True).all()
+
+@router.get("/departments/by-division/{division_id}", response_model=List[schemas.Department])
+def get_departments_by_division(division_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+    """取得指定處別下的所有部門"""
+    return db.query(models.Department).filter(
+        models.Department.division_id == division_id,
+        models.Department.is_active == True
+    ).order_by(models.Department.display_order).all()
+
+@router.post("/departments", response_model=schemas.Department)
+def create_department(dept: schemas.DepartmentCreate, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+    """新增部門"""
+    existing = db.query(models.Department).filter(models.Department.name == dept.name).first()
+    if existing:
+        if existing.is_active:
+            raise HTTPException(status_code=400, detail="Department already exists")
+        # Reactivate if was soft-deleted
+        existing.is_active = True
+        existing.division_id = dept.division_id
+        existing.display_column = dept.display_column
+        existing.display_order = dept.display_order
+        db.commit()
+        db.refresh(existing)
+        return existing
+    
+    new_dept = models.Department(
+        name=dept.name,
+        is_active=True,
+        division_id=dept.division_id,
+        display_column=dept.display_column,
+        display_order=dept.display_order
+    )
     db.add(new_dept)
     db.commit()
     db.refresh(new_dept)
     return new_dept
+
+@router.put("/departments/{dept_id}", response_model=schemas.Department)
+def update_department(
+    dept_id: int, 
+    dept_update: schemas.DepartmentUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(check_admin)
+):
+    """更新部門資訊（含顯示位置）"""
+    dept = db.query(models.Department).filter(models.Department.id == dept_id).first()
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+    
+    update_data = dept_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(dept, key, value)
+    
+    db.commit()
+    db.refresh(dept)
+    return dept
 
 @router.delete("/departments/{dept_id}")
 def delete_department(dept_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
@@ -273,6 +411,10 @@ def get_daily_order_details(date: date = None, db: Session = Depends(get_db), cu
     # Get all active users
     users = db.query(models.User).filter(models.User.is_active == True).order_by(models.User.employee_id.asc()).all()
     
+    # Get all departments for lookup
+    departments = db.query(models.Department).all()
+    dept_map = {d.id: d.name for d in departments}
+    
     # Get all orders for the date
     orders = db.query(models.Order).filter(models.Order.order_date == target_date).all()
     user_orders = {order.user_id: order for order in orders}
@@ -284,7 +426,7 @@ def get_daily_order_details(date: date = None, db: Session = Depends(get_db), cu
             "user_id": user.id,
             "employee_id": user.employee_id,
             "name": user.name,
-            "department": user.department.name if user.department else None,
+            "department": dept_map.get(user.department_id) if user.department_id else None,
             "order_id": order.id if order else None,
             "item_name": "未選",
             "vendor_name": "",

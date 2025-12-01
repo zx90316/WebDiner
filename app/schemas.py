@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, datetime
 
@@ -7,23 +7,27 @@ class UserBase(BaseModel):
     employee_id: str
     name: str
     extension: Optional[str] = None
-    email: EmailStr
+    email: Optional[str] = None  # Email 改為非必要
 
 class UserCreate(UserBase):
     password: str
     department_id: Optional[int] = None
     role: Optional[str] = "user"
+    title: Optional[str] = None  # 職稱
+    is_department_head: bool = False  # 是否為部門主管
 
 class UserUpdate(BaseModel):
     employee_id: Optional[str] = None
     name: Optional[str] = None
     extension: Optional[str] = None
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     department_id: Optional[int] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
     role: Optional[str] = None
+    title: Optional[str] = None  # 職稱
+    is_department_head: Optional[bool] = None  # 是否為部門主管
 
 class UserLogin(BaseModel):
     employee_id: str
@@ -35,6 +39,8 @@ class User(UserBase):
     is_admin: bool
     role: Optional[str] = "user"
     department_id: Optional[int] = None
+    title: Optional[str] = None  # 職稱
+    is_department_head: bool = False  # 是否為部門主管
 
     class Config:
         from_attributes = True
@@ -50,19 +56,105 @@ class ChangePassword(BaseModel):
     old_password: str
     new_password: str
 
-# Department Schemas
+# Division Schemas (處別)
+class DivisionBase(BaseModel):
+    name: str  # 處別名稱：管理處、技術處、審驗處
+    is_active: bool = True
+    display_column: int = 0  # 顯示欄位 (0-3)
+    display_order: int = 0   # 欄內排序
+
+class DivisionCreate(DivisionBase):
+    pass
+
+class DivisionUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+    display_column: Optional[int] = None
+    display_order: Optional[int] = None
+
+class Division(DivisionBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+# Department Schemas (部門)
 class DepartmentBase(BaseModel):
     name: str
     is_active: bool = True
+    division_id: Optional[int] = None  # 所屬處別ID
+    display_column: int = 0  # 顯示欄位 (0-3)
+    display_order: int = 0   # 欄內排序
 
 class DepartmentCreate(DepartmentBase):
     pass
+
+class DepartmentUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+    division_id: Optional[int] = None
+    display_column: Optional[int] = None
+    display_order: Optional[int] = None
 
 class Department(DepartmentBase):
     id: int
 
     class Config:
         from_attributes = True
+
+class DepartmentWithDivision(Department):
+    """部門資訊含處別名稱"""
+    division_name: Optional[str] = None
+
+# 處別含部門（需在 Department 定義後）
+class DivisionWithDepartments(Division):
+    """處別及其下屬部門"""
+    departments: List[Department] = []
+
+# 分機表專用 Schema
+class ExtensionDirectoryUser(BaseModel):
+    """分機表中的使用者資訊"""
+    employee_id: str
+    name: str
+    extension: Optional[str] = None
+    title: Optional[str] = None
+    is_department_head: bool = False
+
+    class Config:
+        from_attributes = True
+
+class ExtensionDirectoryDepartment(BaseModel):
+    """分機表中的部門及其成員"""
+    id: int
+    name: str
+    division_id: Optional[int] = None
+    division_name: Optional[str] = None
+    display_order: int
+    users: List[ExtensionDirectoryUser] = []
+
+    class Config:
+        from_attributes = True
+
+class ExtensionDirectoryDivision(BaseModel):
+    """分機表中的處別及其部門"""
+    id: int
+    name: str
+    display_column: int
+    display_order: int
+    departments: List[ExtensionDirectoryDepartment] = []
+
+    class Config:
+        from_attributes = True
+
+class ExtensionDirectoryColumn(BaseModel):
+    """分機表的單一欄"""
+    column_index: int
+    divisions: List[ExtensionDirectoryDivision] = []
+
+class ExtensionDirectory(BaseModel):
+    """完整的分機表結構"""
+    columns: List[ExtensionDirectoryColumn] = []
+    generated_at: datetime
 
 # Vendor Schemas
 class VendorBase(BaseModel):

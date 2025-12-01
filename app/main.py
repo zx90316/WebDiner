@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
-from .routers import auth, menu, orders, admin, vendor
+from .routers import auth, menu, orders, admin, vendor, extension_directory
 from . import models
 
 # Create tables
@@ -36,6 +36,7 @@ app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(admin.router)
 app.include_router(vendor.router)
+app.include_router(extension_directory.router)
 
 
 @app.get("/")
