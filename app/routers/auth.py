@@ -99,3 +99,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 async def get_current_user_info(current_user: models.User = Depends(get_current_user)):
     """Get current authenticated user information"""
     return current_user
+
+@router.post("/change-password")
+def change_password(
+    password_data: schemas.ChangePassword,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Allow authenticated users to change their own password"""
+    if not verify_password(password_data.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect old password")
+    
+    current_user.hashed_password = get_password_hash(password_data.new_password)
+    db.commit()
+    
+    return {"message": "Password updated successfully"}

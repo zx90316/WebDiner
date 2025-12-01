@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { AuthProvider, useAuth } from "./features/auth/AuthContext";
 import { LoginPage } from "./features/auth/LoginPage";
 import { CalendarOrdering } from "./features/orders/CalendarOrdering";
+import { ChangePassword } from "./features/auth/ChangePassword";
 import { AdminDashboard } from "./features/admin/AdminDashboard";
 import { MyOrders } from "./features/orders/MyOrders";
 import { ToastProvider } from "./components/Toast";
@@ -47,6 +48,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute>
+                  <ChangePassword />
                 </ProtectedRoute>
               }
             />

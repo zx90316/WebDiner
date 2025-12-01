@@ -206,6 +206,12 @@ def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Dep
         update_data["is_admin"] = (new_role in ["admin", "sysadmin"])
 
     if "password" in update_data:
+        # Permission check for password update
+        # Only System Admin can change other users' passwords via this endpoint
+        # Users should use /auth/change-password for their own password
+        if current_user.role != "sysadmin":
+             raise HTTPException(status_code=403, detail="Only System Admins can reset user passwords")
+
         update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
         
     for key, value in update_data.items():

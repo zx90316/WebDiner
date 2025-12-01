@@ -246,18 +246,21 @@ export const UserManagement: React.FC = () => {
                             required
                         />
                     </div>
-                    <div>
-                        <label className="block text-gray-700 mb-2 font-medium">
-                            密碼 {editingId && <span className="text-gray-500 text-sm">(若不修改請留空)</span>}
-                        </label>
-                        <input
-                            type="password"
-                            className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            value={formData.password}
-                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                            required={!editingId}
-                        />
-                    </div>
+                    {/* Password Field - Visible if creating new user OR if SysAdmin */}
+                    {(!editingId || isSysAdmin) && (
+                        <div>
+                            <label className="block text-gray-700 mb-2 font-medium">
+                                密碼 {editingId && <span className="text-gray-500 text-sm">(若不修改請留空)</span>}
+                            </label>
+                            <input
+                                type="password"
+                                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                value={formData.password}
+                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                required={!editingId}
+                            />
+                        </div>
+                    )}
 
                     {/* Role Selection - Only visible/editable for System Admins */}
                     {isSysAdmin && (

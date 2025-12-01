@@ -28,8 +28,8 @@ export const Navbar: React.FC = () => {
                             <Link
                                 to="/"
                                 className={`px-3 py-2 rounded-md text-sm font-medium ${isActive("/")
-                                        ? "bg-blue-100 text-blue-700"
-                                        : "text-gray-700 hover:bg-gray-100"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "text-gray-700 hover:bg-gray-100"
                                     }`}
                             >
                                 點餐
@@ -37,8 +37,8 @@ export const Navbar: React.FC = () => {
                             <Link
                                 to="/my-orders"
                                 className={`px-3 py-2 rounded-md text-sm font-medium ${isActive("/my-orders")
-                                        ? "bg-blue-100 text-blue-700"
-                                        : "text-gray-700 hover:bg-gray-100"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : "text-gray-700 hover:bg-gray-100"
                                     }`}
                             >
                                 我的訂單
@@ -47,8 +47,8 @@ export const Navbar: React.FC = () => {
                                 <Link
                                     to="/admin"
                                     className={`px-3 py-2 rounded-md text-sm font-medium ${isActive("/admin")
-                                            ? "bg-blue-100 text-blue-700"
-                                            : "text-gray-700 hover:bg-gray-100"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : "text-gray-700 hover:bg-gray-100"
                                         }`}
                                 >
                                     管理後台
@@ -58,6 +58,12 @@ export const Navbar: React.FC = () => {
                     </div>
                     <div className="flex items-center space-x-4">
                         <span className="text-sm text-gray-600">{user.name}</span>
+                        <Link
+                            to="/change-password"
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                            修改密碼
+                        </Link>
                         <button
                             onClick={handleLogout}
                             className="text-sm text-red-600 hover:text-red-800"
