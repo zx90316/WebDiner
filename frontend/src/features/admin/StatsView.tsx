@@ -91,7 +91,7 @@ export const StatsView: React.FC = () => {
                                             <tbody>
                                                 {vendor.items.map((item: any) => (
                                                     <tr key={item.name} className="border-b last:border-0 hover:bg-gray-50">
-                                                        <td className="p-3 text-gray-800">{item.name}</td>
+                                                        <td className="p-3 text-gray-800">{item.description? item.description + " (" + item.name + ")" : item.name}</td>
                                                         <td className="p-3 text-right font-medium">{item.count}</td>
                                                         <td className="p-3 text-right text-gray-600">${item.subtotal}</td>
                                                     </tr>

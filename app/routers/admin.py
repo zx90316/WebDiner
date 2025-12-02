@@ -56,7 +56,7 @@ def get_stats(date: date = None, db: Session = Depends(get_db), current_user: mo
                 vendor_stats[vendor_name]["total_count"] += quantity
                 
                 if menu_item.name not in vendor_stats[vendor_name]["items"]:
-                    vendor_stats[vendor_name]["items"][menu_item.name] = {"count": 0, "price": price}
+                    vendor_stats[vendor_name]["items"][menu_item.name] = {"count": 0, "price": price, "description": menu_item.description}
                 
                 vendor_stats[vendor_name]["items"][menu_item.name]["count"] += quantity
         
@@ -95,7 +95,12 @@ def get_stats(date: date = None, db: Session = Depends(get_db), current_user: mo
     vendors_list = []
     for v_name, v_data in vendor_stats.items():
         items_list = [
-            {"name": i_name, "count": i_data["count"], "subtotal": i_data["count"] * i_data["price"]}
+            {
+                "name": i_name, 
+                "description": i_data.get("description", ""),
+                "count": i_data["count"], 
+                "subtotal": i_data["count"] * i_data["price"]
+            }
             for i_name, i_data in v_data["items"].items()
         ]
         items_list.sort(key=lambda x: x["count"], reverse=True)

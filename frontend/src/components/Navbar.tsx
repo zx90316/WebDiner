@@ -1,9 +1,11 @@
 import React from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthContext";
+import { useUIVersion } from "../context/UIVersionContext";
 
 export const Navbar: React.FC = () => {
     const { user, logout } = useAuth();
+    const { uiVersion, toggleUIVersion } = useUIVersion();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -98,6 +100,28 @@ export const Navbar: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex items-center space-x-4">
+                        {/* UI 版本切換開關 */}
+                        <div className="flex items-center space-x-2 border-r pr-4 mr-2">
+                            <span className="text-xs text-gray-500">介面:</span>
+                            <button
+                                onClick={toggleUIVersion}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                    uiVersion === "legacy" ? "bg-amber-500" : "bg-blue-500"
+                                }`}
+                                title={uiVersion === "legacy" ? "切換到新版介面" : "切換到舊版介面"}
+                            >
+                                <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                        uiVersion === "legacy" ? "translate-x-6" : "translate-x-1"
+                                    }`}
+                                />
+                            </button>
+                            <span className={`text-xs font-medium ${
+                                uiVersion === "legacy" ? "text-amber-600" : "text-blue-600"
+                            }`}>
+                                {uiVersion === "legacy" ? "舊版" : "新版"}
+                            </span>
+                        </div>
                         <span className="text-sm text-gray-600">{user.name}</span>
                         <Link
                             to="/change-password"
