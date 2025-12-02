@@ -211,6 +211,7 @@ def read_orders(db: Session = Depends(get_db), current_user: models.User = Depen
             "vendor_name": vendor.name if vendor else ("不訂餐" if order.status == "NoOrder" else None),
             "vendor_color": vendor.color if vendor else None,
             "menu_item_name": menu_item.name if menu_item else ("不訂餐" if order.status == "NoOrder" else None),
+            "menu_item_description": menu_item.description if menu_item else None,
             "menu_item_price": menu_item.price if menu_item else None
         }
         result.append(order_dict)

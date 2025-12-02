@@ -759,7 +759,7 @@ export const LegacyCalendarOrdering: React.FC = () => {
                                     {mealOptions.map((meal, index) => (
                                         <th key={index} style={{ 
                                             border: "1px solid #ccc", 
-                                            padding: "8px", 
+                                            padding: "4px", 
                                             fontSize: "12px",
                                             lineHeight: "1.3"
                                         }}>

@@ -26,6 +26,7 @@ interface DaySelection {
     vendor_name: string;
     vendor_color?: string;
     item_name: string;
+    item_description?: string;
     is_no_order?: boolean;
 }
 
@@ -37,6 +38,8 @@ export const CalendarOrdering: React.FC = () => {
     const [specialDays, setSpecialDays] = useState<{ [date: string]: boolean }>({});
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [expandedDate, setExpandedDate] = useState<string | null>(null);
+    const [lastSelection, setLastSelection] = useState<DaySelection | null>(null);
     const { token } = useAuth();
     const { showToast } = useToast();
 
@@ -71,6 +74,22 @@ export const CalendarOrdering: React.FC = () => {
         }
 
         return days;
+    };
+
+    // Group days into weeks for expandable row layout
+    const getWeeks = (days: (Date | null)[]) => {
+        const weeks: (Date | null)[][] = [];
+        for (let i = 0; i < days.length; i += 7) {
+            weeks.push(days.slice(i, i + 7));
+        }
+        // Pad the last week if needed
+        if (weeks.length > 0) {
+            const lastWeek = weeks[weeks.length - 1];
+            while (lastWeek.length < 7) {
+                lastWeek.push(null);
+            }
+        }
+        return weeks;
     };
 
     const formatDate = (date: Date) => {
@@ -122,87 +141,36 @@ export const CalendarOrdering: React.FC = () => {
         }
     };
 
-    const selectItem = (date: string, vendorId: number, vendorName: string, itemId: number, itemName: string, vendorColor: string) => {
+    const selectItem = (date: string, vendorId: number, vendorName: string, itemId: number, itemName: string, itemDescription: string, vendorColor: string) => {
+        const newSelection: DaySelection = {
+            date,
+            vendor_id: vendorId,
+            vendor_menu_item_id: itemId,
+            vendor_name: vendorName,
+            vendor_color: vendorColor,
+            item_name: itemName,
+            item_description: itemDescription,
+            is_no_order: false,
+        };
         setSelections((prev) => ({
             ...prev,
-            [date]: {
-                date,
-                vendor_id: vendorId,
-                vendor_menu_item_id: itemId,
-                vendor_name: vendorName,
-                vendor_color: vendorColor,
-                item_name: itemName,
-                is_no_order: false,
-            },
+            [date]: newSelection,
         }));
+        setLastSelection(newSelection);
     };
 
     const selectNoOrder = (date: string) => {
+        const newSelection: DaySelection = {
+            date,
+            vendor_name: "不訂餐",
+            item_name: "不訂餐",
+            is_no_order: true,
+        };
         setSelections((prev) => ({
             ...prev,
-            [date]: {
-                date,
-                vendor_name: "不訂餐",
-                item_name: "不訂餐",
-                is_no_order: true,
-            },
+            [date]: newSelection,
         }));
-    };
-
-    const closeVendorSelection = (date: string) => {
-        setAvailableVendors((prev) => {
-            const newVendors = { ...prev };
-            delete newVendors[date];
-            return newVendors;
-        });
-    };
-
-    // --- Batch Operations ---
-
-    const expandUnselectedDays = async () => {
-        const days = getCalendarDays();
-        const datesToLoad: string[] = [];
-
-        days.forEach(day => {
-            if (!day) return;
-            const dateStr = formatDate(day);
-
-            // Skip if past, weekend, has order, or already selected
-            if (isDatePast(day) || isWeekend(day)) return;
-            if (existingOrders[dateStr]) return;
-            if (selections[dateStr]) return; // Skip if already selected (even No Order)
-
-            if (!availableVendors[dateStr]) {
-                datesToLoad.push(dateStr);
-            }
-        });
-
-        if (datesToLoad.length === 0) {
-            showToast("本月沒有需要展開的未選日期", "info");
-            return;
-        }
-
-        try {
-            setLoading(true);
-            const newVendorsMap = { ...availableVendors };
-
-            // Fetch in parallel
-            await Promise.all(datesToLoad.map(async (date) => {
-                try {
-                    const vendors = await api.get(`/vendors/available/${date}`, token!);
-                    newVendorsMap[date] = vendors;
-                } catch (e) {
-                    console.error(`Failed to load for ${date}`, e);
-                }
-            }));
-
-            setAvailableVendors(newVendorsMap);
-            showToast(`已展開 ${datesToLoad.length} 天的選項`, "success");
-        } catch (error) {
-            showToast("展開失敗", "error");
-        } finally {
-            setLoading(false);
-        }
+        setLastSelection(newSelection);
     };
 
     const applySelectionToMonth = (selection: DaySelection) => {
@@ -223,32 +191,27 @@ export const CalendarOrdering: React.FC = () => {
         showToast(`已套用到本月 ${count} 天`, "success");
     };
 
-    const applySelectionToYear = (selection: DaySelection) => {
-        const startYear = currentMonth.getFullYear();
-        const startMonth = currentMonth.getMonth();
+    const applySelectionToQuarter = (selection: DaySelection) => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // 重置時間為 00:00:00
+        const endDate = new Date(today.getFullYear(), today.getMonth() + 3 + 1, 0); // 往後推 3 個月的最後一天
+        endDate.setHours(23, 59, 59, 999); // 確保包含最後一天
         const newSelections = { ...selections };
         let count = 0;
 
-        // Iterate through next 12 months
-        for (let i = 0; i < 12; i++) {
-            const targetDate = new Date(startYear, startMonth + i, 1);
-            const y = targetDate.getFullYear();
-            const m = targetDate.getMonth();
-            const daysInMonth = new Date(y, m + 1, 0).getDate();
+        // 從今天開始，到往後 3 個月的最後一天
+        for (let date = new Date(today); date <= endDate; date.setDate(date.getDate() + 1)) {
+            const dateStr = formatDate(new Date(date));
 
-            for (let d = 1; d <= daysInMonth; d++) {
-                const date = new Date(y, m, d);
-                const dateStr = formatDate(date);
+            if (isDatePast(new Date(date)) || isWeekend(new Date(date)) || existingOrders[dateStr]) continue;
 
-                if (isDatePast(date) || isWeekend(date) || existingOrders[dateStr]) continue;
-
-                newSelections[dateStr] = { ...selection, date: dateStr };
-                count++;
-            }
+            newSelections[dateStr] = { ...selection, date: dateStr };
+            count++;
         }
 
         setSelections(newSelections);
-        showToast(`已套用到未來一年 ${count} 天`, "success");
+        const endMonth = endDate.getMonth() + 1;
+        showToast(`已套用到 ${endMonth} 月底，共 ${count} 天`, "success");
     };
 
     const applyWeekPatternToMonth = () => {
@@ -286,7 +249,7 @@ export const CalendarOrdering: React.FC = () => {
         showToast(`已套用週範本到本月 ${count} 天`, "success");
     };
 
-    const applyWeekPatternToYear = () => {
+    const applyWeekPatternToQuarter = () => {
         const pattern: { [dayOfWeek: number]: DaySelection } = {};
         Object.values(selections).forEach(sel => {
             const date = new Date(sel.date);
@@ -298,39 +261,54 @@ export const CalendarOrdering: React.FC = () => {
             return;
         }
 
-        const startYear = currentMonth.getFullYear();
-        const startMonth = currentMonth.getMonth();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // 重置時間為 00:00:00
+        const endDate = new Date(today.getFullYear(), today.getMonth() + 3 + 1, 0); // 往後推 3 個月的最後一天
+        endDate.setHours(23, 59, 59, 999); // 確保包含最後一天
         const newSelections = { ...selections };
         let count = 0;
 
-        // Iterate through next 12 months
-        for (let i = 0; i < 12; i++) {
-            const targetDate = new Date(startYear, startMonth + i, 1);
-            const y = targetDate.getFullYear();
-            const m = targetDate.getMonth();
-            const daysInMonth = new Date(y, m + 1, 0).getDate();
+        // 從今天開始，到往後 3 個月的最後一天
+        for (let date = new Date(today); date <= endDate; date.setDate(date.getDate() + 1)) {
+            const currentDate = new Date(date);
+            const dayOfWeek = currentDate.getDay();
+            const template = pattern[dayOfWeek];
 
-            for (let d = 1; d <= daysInMonth; d++) {
-                const date = new Date(y, m, d);
-                const dayOfWeek = date.getDay();
-                const template = pattern[dayOfWeek];
+            if (!template) continue;
 
-                if (!template) continue;
+            const dateStr = formatDate(currentDate);
+            if (isDatePast(currentDate) || isWeekend(currentDate) || existingOrders[dateStr]) continue;
 
-                const dateStr = formatDate(date);
-                if (isDatePast(date) || isWeekend(date) || existingOrders[dateStr]) continue;
-
-                newSelections[dateStr] = { ...template, date: dateStr };
-                count++;
-            }
+            newSelections[dateStr] = { ...template, date: dateStr };
+            count++;
         }
 
         setSelections(newSelections);
-        showToast(`已套用週範本到未來一年 ${count} 天`, "success");
+        const endMonth = endDate.getMonth() + 1;
+        showToast(`已套用週範本到 ${endMonth} 月底，共 ${count} 天`, "success");
     };
 
     const [clearRange, setClearRange] = useState<{ start: string, end: string }>({ start: "", end: "" });
     const [showClearModal, setShowClearModal] = useState(false);
+
+    // 計算本月日期範圍
+    const getMonthRange = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        return {
+            start: formatDate(firstDay),
+            end: formatDate(lastDay)
+        };
+    };
+
+    // 打開清空訂單 Modal 時預設為本月範圍
+    const openClearModal = () => {
+        const monthRange = getMonthRange(currentMonth);
+        setClearRange(monthRange);
+        setShowClearModal(true);
+    };
 
     const handleClearOrders = async () => {
         if (!clearRange.start || !clearRange.end) {
@@ -410,6 +388,32 @@ export const CalendarOrdering: React.FC = () => {
         });
     };
 
+    // Handle date click - expand panel and load vendors
+    const handleDateClick = async (dateStr: string) => {
+        if (expandedDate === dateStr) {
+            // Clicking same date closes the panel
+            setExpandedDate(null);
+        } else {
+            setExpandedDate(dateStr);
+            // Load vendors if not already loaded
+            if (!availableVendors[dateStr]) {
+                await loadVendorsForDate(dateStr);
+            }
+        }
+    };
+
+    // Handle item selection - select and close panel
+    const handleSelectItem = (dateStr: string, vendorId: number, vendorName: string, itemId: number, itemName: string, itemDescription: string, vendorColor: string) => {
+        selectItem(dateStr, vendorId, vendorName, itemId, itemName, itemDescription, vendorColor);
+        setExpandedDate(null);
+    };
+
+    // Handle no order selection - select and close panel
+    const handleSelectNoOrder = (dateStr: string) => {
+        selectNoOrder(dateStr);
+        setExpandedDate(null);
+    };
+
     const cancelOrder = async (orderId: number) => {
         try {
             await api.delete(`/orders/${orderId}`, token!);
@@ -452,10 +456,18 @@ export const CalendarOrdering: React.FC = () => {
     };
 
     const days = getCalendarDays();
+    const weeks = getWeeks(days);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const weekDays = ["日", "一", "二", "三", "四", "五", "六"];
+
+    // Get day name for display
+    const getDayName = (dateStr: string) => {
+        const date = new Date(dateStr);
+        const dayNames = ["日", "一", "二", "三", "四", "五"];
+        return dayNames[date.getDay()];
+    };
 
     if (loading) return <Loading fullScreen />;
 
@@ -486,34 +498,32 @@ export const CalendarOrdering: React.FC = () => {
                 {/* Toolbar */}
                 <div className="bg-white p-4 rounded-lg shadow mb-6 flex flex-wrap gap-2 items-center">
                     <span className="font-bold text-gray-700 mr-2">批量操作:</span>
-                    <button onClick={expandUnselectedDays} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm transition">
-                        展開本月未選日期
+                    <button 
+                        onClick={() => lastSelection && applySelectionToMonth(lastSelection)} 
+                        disabled={!lastSelection}
+                        className={`text-xs px-2 py-1 rounded transition ${lastSelection ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                        title={lastSelection ? `套用「${lastSelection.vendor_name} - ${lastSelection.item_name}」到本月` : '請先選擇一個餐點'}
+                    >
+                        單日 → 本月 {lastSelection && <span className="text-[10px] opacity-70">{lastSelection.vendor_name + " - " + (lastSelection.item_description? lastSelection.item_description + " (" + lastSelection.item_name + ")" : lastSelection.item_name)}</span>}
                     </button>
-                    <button onClick={() => setShowClearModal(true)} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded text-sm transition">
-                        清空訂單
+                    <button 
+                        onClick={() => lastSelection && applySelectionToQuarter(lastSelection)} 
+                        disabled={!lastSelection}
+                        className={`text-xs px-2 py-1 rounded transition ${lastSelection ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                        title={lastSelection ? `套用「${lastSelection.vendor_name} - ${lastSelection.item_name}」到季（往後3個月）` : '請先選擇一個餐點'}
+                    >
+                        單日 → 季 {lastSelection && <span className="text-[10px] opacity-70">{lastSelection.vendor_name + " - " + (lastSelection.item_description? lastSelection.item_description + " (" + lastSelection.item_name + ")" : lastSelection.item_name)}</span>}
                     </button>
-                </div>
-                <div className="flex flex-wrap gap-2 mb-2">
-                    {/* Advanced Batch Actions */}
-                    <div className="text-xs text-gray-500 font-bold mb-1 w-full">進階套用:</div>
-                    {Object.keys(selections).length === 1 && (
-                        <>
-                            <button onClick={() => applySelectionToMonth(Object.values(selections)[0])} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100">
-                                單日 → 本月
-                            </button>
-                            <button onClick={() => applySelectionToYear(Object.values(selections)[0])} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded hover:bg-indigo-100">
-                                單日 → 全年
-                            </button>
-                        </>
-                    )}
                     <button onClick={applyWeekPatternToMonth} className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded hover:bg-purple-100">
                         本週設定 → 本月
                     </button>
-                    <button onClick={applyWeekPatternToYear} className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded hover:bg-purple-100">
-                        本週設定 → 全年
+                    <button onClick={applyWeekPatternToQuarter} className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded hover:bg-purple-100">
+                        本週設定 → 季
+                    </button>
+                    <button onClick={openClearModal} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded text-sm transition">
+                        清空訂單
                     </button>
                 </div>
-
 
                 {/* Clear Modal */}
                 {showClearModal && (
@@ -521,6 +531,37 @@ export const CalendarOrdering: React.FC = () => {
                         <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
                             <h3 className="font-bold text-lg mb-4">清空訂單</h3>
                             <div className="space-y-4">
+                                {/* 快速選擇按鈕 */}
+                                <div>
+                                    <label className="block text-sm text-gray-600 mb-2">快速選擇</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={() => setClearRange(getMonthRange(currentMonth))}
+                                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded text-sm transition"
+                                        >
+                                            本月
+                                        </button>
+                                        <button
+                                            onClick={() => setClearRange(getMonthRange(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)))}
+                                            className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded text-sm transition"
+                                        >
+                                            下個月
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const now = new Date();
+                                                const endOfYear = new Date(now.getFullYear(), 11, 31);
+                                                setClearRange({
+                                                    start: formatDate(now),
+                                                    end: formatDate(endOfYear)
+                                                });
+                                            }}
+                                            className="px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-600 rounded text-sm transition"
+                                        >
+                                            今年剩餘
+                                        </button>
+                                    </div>
+                                </div>
                                 <div>
                                     <label className="block text-sm text-gray-600 mb-1">開始日期</label>
                                     <input type="date" value={clearRange.start} onChange={e => setClearRange(prev => ({ ...prev, start: e.target.value }))} className="w-full border rounded p-2" />
@@ -553,192 +594,254 @@ export const CalendarOrdering: React.FC = () => {
                         ))}
                     </div>
 
-                    {/* Calendar Grid */}
-                    <div className="grid grid-cols-7 gap-2">
-                        {days.map((day, index) => {
-                            if (!day) {
-                                return <div key={`empty-${index}`} className="aspect-square" />;
-                            }
-
-                            const dateStr = formatDate(day);
-
-                            // Check if date is past
-                            const now = new Date();
-                            const dayMidnight = new Date(day);
-                            dayMidnight.setHours(0, 0, 0, 0);
-
-                            let isPast = false;
-                            if (dayMidnight < today) {
-                                // Yesterday or earlier
-                                isPast = true;
-                            } else if (dayMidnight.getTime() === today.getTime()) {
-                                // Today - check if it's past 9:00 AM
-                                if (now.getHours() >= 9) {
-                                    isPast = true;
-                                }
-                            }
-
-                            const isDayWeekend = isWeekend(day);
-                            const hasOrder = existingOrders[dateStr];
-                            const hasSelection = selections[dateStr];
-                            const vendors = availableVendors[dateStr] || [];
-
-                            // Find vendor color for existing order
-                            let existingOrderColor = "#10B981"; // Default green
-                            let existingOrderBg = "#ffffffff"; // Default green-50
-                            let existingOrderBorder = "#34D399"; // Default green-400
-
-                            if (hasOrder) {
-                                if (hasOrder.vendor_color) {
-                                    existingOrderColor = hasOrder.vendor_color;
-                                    existingOrderBg = existingOrderBg; // 10% opacity
-                                    existingOrderBorder = hasOrder.vendor_color;
-                                } else if (availableVendors[dateStr]) {
-                                    const vendor = availableVendors[dateStr].find(v => v.vendor.id === hasOrder.vendor_id);
-                                    if (vendor && vendor.vendor.color) {
-                                        existingOrderColor = vendor.vendor.color;
-                                        existingOrderBg = `${vendor.vendor.color}1A`; // 10% opacity
-                                        existingOrderBorder = vendor.vendor.color;
-                                    }
-                                }
-                            }
-
-                            // Find vendor color for selection
-                            let selectionColor = "#3B82F6"; // Default blue
-                            let selectionBg = "#EFF6FF"; // Default blue-50
-                            let selectionBorder = "#60A5FA"; // Default blue-400
-
-                            if (hasSelection && hasSelection.vendor_color) {
-                                selectionColor = hasSelection.vendor_color;
-                                selectionBg = `${hasSelection.vendor_color}1A`; // 10% opacity
-                                selectionBorder = hasSelection.vendor_color;
-                            }
-
-                            // Can modify order if not past cutoff
-                            const canModify = !isPast && !isDayWeekend;
+                    {/* Calendar Grid - Organized by Weeks */}
+                    <div className="space-y-1">
+                        {weeks.map((week, weekIndex) => {
+                            // Check if any day in this week is expanded
+                            const expandedDayInWeek = week.find(day => day && formatDate(day) === expandedDate);
+                            const expandedDateStr = expandedDayInWeek ? formatDate(expandedDayInWeek) : null;
+                            const expandedVendors = expandedDateStr ? availableVendors[expandedDateStr] || [] : [];
 
                             return (
-                                <div
-                                    key={dateStr}
-                                    style={hasOrder
-                                        ? { backgroundColor: existingOrderBg, borderColor: existingOrderBorder }
-                                        : hasSelection
-                                            ? { backgroundColor: selectionBg, borderColor: selectionBorder }
-                                            : {}
-                                    }
-                                    className={`aspect-square border rounded-lg p-2 cursor-pointer transition ${isPast || isDayWeekend
-                                        ? "bg-gray-200 opacity-50 cursor-not-allowed"
-                                        : hasOrder
-                                            ? "" // Style handled by inline style
-                                            : hasSelection
-                                                ? "" // Style handled by inline style
-                                                : "bg-white hover:shadow-lg hover:border-blue-300"
-                                        }`}
-                                    onClick={() => !isPast && !isDayWeekend && !hasOrder && loadVendorsForDate(dateStr)}
-                                >
-                                    <div className="text-sm font-bold mb-1">{day.getDate()}</div>
+                                <div key={`week-${weekIndex}`}>
+                                    {/* Week Row */}
+                                    <div className="grid grid-cols-7 gap-2">
+                                        {week.map((day, dayIndex) => {
+                                            if (!day) {
+                                                return <div key={`empty-${weekIndex}-${dayIndex}`} className="aspect-square" />;
+                                            }
 
-                                    {isDayWeekend && <p className="text-xs text-gray-500">週末</p>}
-                                    {isPast && !isDayWeekend && <p className="text-xs text-gray-500">已過期</p>}
+                                            const dateStr = formatDate(day);
+                                            const isExpanded = expandedDate === dateStr;
 
-                                    {/* Existing Order */}
-                                    {hasOrder && (
-                                        <div className="text-xs space-y-1">
-                                            <div
-                                                className="p-2 rounded border"
-                                                style={{
-                                                    backgroundColor: existingOrderBg,
-                                                    borderColor: existingOrderBorder,
-                                                    color: existingOrderColor
-                                                }}
-                                            >
-                                                <p className="font-bold truncate text-sm" style={{ color: existingOrderColor }}>
-                                                    {hasOrder.vendor_name}
-                                                </p>
-                                                <p className="truncate text-gray-600">
-                                                    {hasOrder.menu_item_name}
-                                                </p>
+                                            // Check if date is past
+                                            const now = new Date();
+                                            const dayMidnight = new Date(day);
+                                            dayMidnight.setHours(0, 0, 0, 0);
+
+                                            let isPast = false;
+                                            if (dayMidnight < today) {
+                                                isPast = true;
+                                            } else if (dayMidnight.getTime() === today.getTime()) {
+                                                if (now.getHours() >= 9) {
+                                                    isPast = true;
+                                                }
+                                            }
+
+                                            const isDayWeekend = isWeekend(day);
+                                            const hasOrder = existingOrders[dateStr];
+                                            const hasSelection = selections[dateStr];
+
+                                            // Find vendor color for existing order
+                                            let existingOrderColor = "#10B981";
+                                            let existingOrderBorder = "#34D399";
+
+                                            if (hasOrder) {
+                                                if (hasOrder.vendor_color) {
+                                                    existingOrderColor = hasOrder.vendor_color;
+                                                    existingOrderBorder = hasOrder.vendor_color;
+                                                }
+                                            }
+
+                                            // Find vendor color for selection
+                                            let selectionColor = "#3B82F6";
+                                            let selectionBorder = "#60A5FA";
+
+                                            if (hasSelection && hasSelection.vendor_color) {
+                                                selectionColor = hasSelection.vendor_color;
+                                                selectionBorder = hasSelection.vendor_color;
+                                            }
+
+                                            const canModify = !isPast && !isDayWeekend;
+                                            const canClick = canModify && !hasOrder;
+
+                                            return (
+                                                <div
+                                                    key={dateStr}
+                                                    className={`aspect-[1/2.5] sm:aspect-square border-2 rounded-lg p-1 sm:p-1.5 transition-all relative flex flex-col
+                                                        ${isPast || isDayWeekend
+                                                            ? "bg-gray-100 opacity-50 cursor-not-allowed border-gray-200"
+                                                            : hasOrder
+                                                                ? "cursor-default"
+                                                                : hasSelection
+                                                                    ? "cursor-pointer hover:shadow-md"
+                                                                    : isExpanded
+                                                                        ? "bg-blue-50 border-blue-400 shadow-md cursor-pointer"
+                                                                        : "bg-white hover:shadow-md hover:border-blue-300 cursor-pointer"
+                                                        }`}
+                                                    style={
+                                                        hasOrder
+                                                            ? { borderColor: existingOrderBorder, backgroundColor: `${existingOrderColor}10` }
+                                                            : hasSelection
+                                                                ? { borderColor: selectionBorder, backgroundColor: `${selectionColor}10` }
+                                                                : {}
+                                                    }
+                                                    onClick={() => canClick && handleDateClick(dateStr)}
+                                                >
+                                                    {/* Header: Date + Status Icon */}
+                                                    <div className="flex items-start justify-between">
+                                                        {/* Date Number */}
+                                                        <span className={`text-sm sm:text-base font-bold ${isExpanded ? "text-blue-600" : ""}`}>
+                                                            {day.getDate()}
+                                                        </span>
+                                                        
+                                                        {/* Status Icon */}
+                                                        {hasOrder && (
+                                                            <div
+                                                                className="w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center flex-shrink-0"
+                                                                style={{ backgroundColor: existingOrderColor }}
+                                                            >
+                                                                <span className="text-white text-[10px] sm:text-xs">✓</span>
+                                                            </div>
+                                                        )}
+                                                        {!hasOrder && hasSelection && (
+                                                            <div
+                                                                className="w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 flex-shrink-0"
+                                                                style={{ borderColor: selectionColor, backgroundColor: `${selectionColor}20` }}
+                                                            >
+                                                                <span style={{ color: selectionColor }} className="text-[10px] sm:text-xs">●</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Content Area */}
+                                                    <div className="flex-1 flex flex-col justify-center overflow-hidden">
+                                                        {/* Weekend/Past indicator */}
+                                                        {isDayWeekend && (
+                                                            <span className="text-[10px] sm:text-xs text-gray-400 text-center">休</span>
+                                                        )}
+
+                                                        {/* Existing Order Info */}
+                                                        {hasOrder && (
+                                                            <div className="text-center">
+                                                                <p className="text-[10px] sm:text-[20px] text-gray-600 leading-tight break-words">
+                                                                    {hasOrder.vendor_name}
+                                                                </p>
+                                                                <p className="text-[7px] sm:text-[18px] text-gray-500 leading-tight break-words">
+                                                                    {hasOrder.menu_item_description ? hasOrder.menu_item_description + " (" + hasOrder.menu_item_name + ")" : hasOrder.menu_item_name}
+                                                                </p>
+                                                                {canModify && (
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            cancelOrder(hasOrder.id);
+                                                                        }}
+                                                                        className="text-[8px] sm:text-[20px] text-red-500 hover:text-red-700"
+                                                                    >
+                                                                        取消
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                        
+                                                        {/* Selection Info */}
+                                                        {!hasOrder && hasSelection && (
+                                                            <div className="text-center">
+                                                                <p className="text-[8px] sm:text-[20px] leading-tight break-words" style={{ color: selectionColor }}>
+                                                                    {hasSelection.vendor_name}
+                                                                </p>
+                                                                <p className="text-[7px] sm:text-[18px] text-gray-500 leading-tight break-words">
+                                                                    {hasSelection.item_description ? hasSelection.item_description + " (" + hasSelection.item_name + ")" : hasSelection.item_name}
+                                                                </p>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        clearSelection(dateStr);
+                                                                    }}
+                                                                    className="text-[8px] sm:text-[20px] text-red-500 hover:text-red-700"
+                                                                >
+                                                                    取消
+                                                                </button>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Empty state - add button */}
+                                                        {!hasOrder && !hasSelection && canModify && (
+                                                            <div className="flex justify-center">
+                                                                <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center transition-colors
+                                                                    ${isExpanded ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-400 hover:bg-blue-100 hover:text-blue-500"}`}>
+                                                                    <span className="text-sm sm:text-base">{isExpanded ? "−" : "+"}</span>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {/* Expandable Panel */}
+                                    <div
+                                        className={`transition-all duration-300 ease-in-out ${expandedDateStr ? "opacity-100" : "max-h-0 opacity-0 overflow-hidden"}`}
+                                    >
+                                        {expandedDateStr && (
+                                            <div className="bg-gradient-to-b from-blue-50 to-white border-2 border-blue-200 rounded-lg mt-2 p-4 shadow-lg">
+                                                {/* Panel Header */}
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-lg">📅</span>
+                                                        <h3 className="font-bold text-gray-800">
+                                                            {expandedDateStr} (週{getDayName(expandedDateStr)}) 的餐點選擇
+                                                        </h3>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setExpandedDate(null)}
+                                                        className="p-1.5 hover:bg-gray-200 rounded-full transition-colors"
+                                                    >
+                                                        <span className="text-gray-500 text-lg">✕</span>
+                                                    </button>
+                                                </div>
+
+                                                {/* Menu Items Grid */}
+                                                {expandedVendors.length > 0 ? (
+                                                    <div className="space-y-4">
+                                                        {/* Vendor grouped items */}
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                                            {expandedVendors.flatMap(v =>
+                                                                v.menu_items.map(item => ({
+                                                                    vendor: v.vendor,
+                                                                    item
+                                                                }))
+                                                            ).map(({ vendor, item }) => (
+                                                                <button
+                                                                    key={`${vendor.id}-${item.id}`}
+                                                                    onClick={() => handleSelectItem(expandedDateStr, vendor.id, vendor.name, item.id, item.name, item.description, vendor.color)}
+                                                                    className="w-full text-left bg-white rounded-lg border-l-4 shadow-sm hover:shadow-md transition-all p-3 group"
+                                                                    style={{ borderLeftColor: vendor.color || '#3B82F6' }}
+                                                                >
+                                                                    {/* Vendor Name */}
+                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                        <div
+                                                                            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                                                            style={{ backgroundColor: vendor.color || '#3B82F6' }}
+                                                                        />
+                                                                        <span className="text-xs font-medium text-gray-500">{vendor.name}</span>
+                                                                    </div>
+                                                                    {/* Item Name */}
+                                                                    <h4 className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">
+                                                                        {item.description? item.description + " (" + item.name + ")" : item.name}
+                                                                    </h4>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* No Order Button */}
+                                                        <button
+                                                            onClick={() => handleSelectNoOrder(expandedDateStr)}
+                                                            className="w-full p-3 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 hover:border-gray-400 transition-all"
+                                                        >
+                                                            <span className="font-medium">🚫 今天不訂餐</span>
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center py-8 text-gray-500">
+                                                        <div className="animate-spin inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mb-2"></div>
+                                                        <p>載入中...</p>
+                                                    </div>
+                                                )}
                                             </div>
-                                            {canModify && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        cancelOrder(hasOrder.id);
-                                                    }}
-                                                    className="w-full bg-red-50 text-red-600 hover:bg-red-100 py-1 rounded text-xs font-medium transition"
-                                                >
-                                                    取消
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* Selection */}
-                                    {!hasOrder && hasSelection && (
-                                        <div className="text-xs">
-                                            <p className="font-bold truncate" style={{ color: selectionColor }}>已選擇</p>
-                                            <p className="truncate" style={{ color: selectionColor }}>{hasSelection.vendor_name}</p>
-                                            <p className="text-gray-600 truncate">{hasSelection.item_name}</p>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    clearSelection(dateStr);
-                                                }}
-                                                className="text-red-600 hover:text-red-800 mt-1 text-xs"
-                                            >
-                                                取消
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {/* Vendor Selection */}
-                                    {!hasOrder && !hasSelection && !isPast && !isDayWeekend && vendors.length > 0 && (
-                                        <div className="text-xs grid grid-cols-2 gap-1 mt-1 scrollbar-hide">
-                                            {/* No Order Button */}
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    selectNoOrder(dateStr);
-                                                }}
-                                                className="w-full text-left p-1.5 bg-gray-50 border border-gray-200 text-gray-600 rounded hover:bg-gray-100 transition-all shadow-sm"
-                                            >
-                                                <div className="font-bold text-xs">今天不訂餐</div>
-                                            </button>
-
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    closeVendorSelection(dateStr);
-                                                }}
-                                                className="w-full text-left p-1.5 bg-gray-100 border border-gray-200 text-gray-600 rounded hover:bg-gray-200 transition-all shadow-sm"
-                                            >
-                                                <div className="font-bold text-xs text-center">取消</div>
-                                            </button>
-
-                                            {vendors.flatMap(v => v.menu_items.map(item => ({ vendor: v.vendor, item }))).map(({ vendor, item }) => (
-                                                <button
-                                                    key={`${vendor.id}-${item.id}`}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        selectItem(dateStr, vendor.id, vendor.name, item.id, item.name, vendor.color);
-                                                    }}
-                                                    className="w-full text-left p-1.5 bg-white border text-gray-800 rounded hover:opacity-80 transition-all shadow-sm group"
-                                                    style={{ borderColor: vendor.color || '#BFDBFE' }}
-                                                >
-                                                    <div className="font-bold truncate text-gray-600">
-                                                        {item.name}
-                                                    </div>
-                                                    <div className="text-[10px] text-gray-500 truncate">
-                                                        {vendor.name}
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {!hasOrder && !hasSelection && !isPast && !isDayWeekend && vendors.length === 0 && (
-                                        <p className="text-xs text-gray-400">點擊載入</p>
-                                    )}
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}
