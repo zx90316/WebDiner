@@ -7,6 +7,7 @@ import { UserManagement } from "./UserManagement";
 import { UserOrderingSettings } from "./UserOrderingSettings";
 import { DepartmentManager } from "./DepartmentManager";
 import { HolidayManager } from "./HolidayManager";
+import { OrderAnnouncementView } from "./OrderAnnouncementView";
 
 
 export const AdminDashboard: React.FC = () => {
@@ -19,6 +20,7 @@ export const AdminDashboard: React.FC = () => {
         { id: "users", name: "用戶管理", icon: "👥" },
         { id: "orders", name: "人員訂餐設定", icon: "📅" },
         { id: "holidays", name: "節假日管理", icon: "🗓️" },
+        { id: "announcement", name: "訂餐公告", icon: "📋" },
         { id: "stats", name: "統計資料", icon: "📊" },
         { id: "reminders", name: "訂餐提醒", icon: "📧" },
     ];
@@ -52,6 +54,7 @@ export const AdminDashboard: React.FC = () => {
                         {activeTab === "users" && <UserManagement />}
                         {activeTab === "orders" && <UserOrderingSettings />}
                         {activeTab === "holidays" && <HolidayManager />}
+                        {activeTab === "announcement" && <OrderAnnouncementView />}
                         {activeTab === "stats" && <StatsView />}
                         {activeTab === "reminders" && <RemindersView />}
                     </div>

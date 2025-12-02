@@ -559,3 +559,63 @@ def delete_special_day(date_str: str, db: Session = Depends(get_db), current_use
     db.delete(db_day)
     db.commit()
     return {"message": "Special day deleted"}
+
+# ========== Order Announcement (訂餐公告) ==========
+
+@router.get("/order_announcement")
+def get_order_announcement(date: date = None, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
+    """
+    取得訂餐公告資料 - 以品項為單位，顯示訂購人員
+    回傳格式: [{ vendor_name, vendor_color, item_name, item_description, price, orders: [{ employee_id, name }] }]
+    """
+    from datetime import date as date_type
+    target_date = date if date else date_type.today()
+    
+    # 取得該日期所有訂單
+    orders = db.query(models.Order).filter(models.Order.order_date == target_date).all()
+    
+    # 以 vendor_menu_item_id 為 key 來聚合訂單
+    item_orders = {}
+    
+    for order in orders:
+        if not order.vendor_menu_item_id:
+            continue  # 跳過舊式訂單
+            
+        menu_item = db.query(models.VendorMenuItem).get(order.vendor_menu_item_id)
+        if not menu_item:
+            continue
+            
+        user = db.query(models.User).get(order.user_id)
+        if not user:
+            continue
+        
+        item_key = order.vendor_menu_item_id
+        
+        if item_key not in item_orders:
+            item_orders[item_key] = {
+                "vendor_id": menu_item.vendor_id,
+                "vendor_name": menu_item.vendor.name if menu_item.vendor else "未知廠商",
+                "vendor_color": menu_item.vendor.color if menu_item.vendor else "#6B7280",
+                "item_id": menu_item.id,
+                "item_name": menu_item.name,
+                "item_description": menu_item.description or "",
+                "orders": []
+            }
+        
+        item_orders[item_key]["orders"].append({
+            "employee_id": user.employee_id,
+            "name": user.name
+        })
+    
+    # 轉換為 list 並排序 (依照廠商名稱、品項名稱)
+    result = list(item_orders.values())
+    result.sort(key=lambda x: (x["vendor_name"], x["item_name"]))
+    
+    # 每個品項內的訂購人員依工號排序
+    for item in result:
+        item["orders"].sort(key=lambda x: x["employee_id"])
+    
+    return {
+        "date": target_date,
+        "items": result
+    }
