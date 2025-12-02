@@ -2,9 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, time, date
+from zoneinfo import ZoneInfo
 import json
 from .. import models, schemas, database
 from .auth import get_current_user
+
+# 台灣時區
+TAIWAN_TZ = ZoneInfo("Asia/Taipei")
 
 router = APIRouter(
     prefix="/orders",
@@ -28,14 +32,15 @@ def is_holiday_or_weekend(order_date: date, db: Session):
     return False
 
 def check_cutoff(order_date: date):
-    now = datetime.now()
-    today = now.date()
+    # 使用台灣時間進行判斷
+    now_taiwan = datetime.now(TAIWAN_TZ)
+    today_taiwan = now_taiwan.date()
     
-    if order_date < today:
+    if order_date < today_taiwan:
         raise HTTPException(status_code=400, detail="Cannot order for past dates")
     
-    if order_date == today:
-        if now.time() > CUTOFF_TIME:
+    if order_date == today_taiwan:
+        if now_taiwan.time() > CUTOFF_TIME:
             raise HTTPException(status_code=400, detail="Order cut-off time (9:00 AM) has passed for today")
 
 @router.get("/special_days", response_model=List[schemas.SpecialDay])

@@ -248,6 +248,7 @@ class OrderWithDetails(Order):
     vendor_color: Optional[str] = None
     menu_item_name: Optional[str] = None
     menu_item_price: Optional[int] = None
+    menu_item_description: Optional[str] = None
 
 # Special Day Schemas
 class SpecialDayBase(BaseModel):

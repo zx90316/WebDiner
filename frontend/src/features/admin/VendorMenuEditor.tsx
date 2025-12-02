@@ -82,6 +82,12 @@ export const VendorMenuEditor: React.FC = () => {
             return;
         }
 
+        // 當設定特定供應日期時，描述欄位為必填
+        if (formData.weekday !== "" && !formData.description) {
+            showToast("設定特定供應日期時，描述欄位為必填（用於批次訂餐匹配）", "error");
+            return;
+        }
+
         if (!selectedVendor) {
             showToast("請先選擇廠商", "error");
             return;
@@ -219,13 +225,21 @@ export const VendorMenuEditor: React.FC = () => {
                         </select>
                     </div>
                     <div>
-                        <label className="block text-gray-700 mb-2 font-medium">描述</label>
+                        <label className="block text-gray-700 mb-2 font-medium">
+                            描述 {formData.weekday !== "" && <span className="text-red-500">*</span>}
+                        </label>
                         <input
-                            placeholder="品項描述（選填）"
-                            className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
+                            placeholder={formData.weekday !== "" ? "品項描述（設定供應日期時必填，用於批次訂餐匹配）" : "品項描述（選填）"}
+                            className={`w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 ${formData.weekday !== "" && !formData.description ? "border-orange-300" : ""}`}
                             value={formData.description}
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            required={formData.weekday !== ""}
                         />
+                        {formData.weekday !== "" && (
+                            <p className="text-xs text-gray-500 mt-1">
+                                ※ 設定特定供應日期時，描述欄位用於批次訂餐時匹配同類型品項
+                            </p>
+                        )}
                     </div>
                 </div>
                 <div className="flex gap-2 mt-4">

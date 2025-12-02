@@ -173,48 +173,233 @@ export const CalendarOrdering: React.FC = () => {
         setLastSelection(newSelection);
     };
 
-    const applySelectionToMonth = (selection: DaySelection) => {
+    const applySelectionToMonth = async (selection: DaySelection) => {
         const days = getCalendarDays();
         const newSelections = { ...selections };
         let count = 0;
+        let skipped = 0;
 
+        // 取得所有需要訂餐的日期
+        const datesToProcess: string[] = [];
         days.forEach(day => {
             if (!day) return;
             const dateStr = formatDate(day);
             if (isDatePast(day) || isWeekend(day) || existingOrders[dateStr]) return;
-
-            newSelections[dateStr] = { ...selection, date: dateStr };
-            count++;
+            datesToProcess.push(dateStr);
         });
 
+        // 批次載入所有日期的可用廠商
+        const vendorPromises = datesToProcess.map(async (dateStr) => {
+            if (!availableVendors[dateStr]) {
+                try {
+                    const vendors = await api.get(`/vendors/available/${dateStr}`, token!);
+                    return { dateStr, vendors };
+                } catch {
+                    return { dateStr, vendors: [] };
+                }
+            }
+            return { dateStr, vendors: availableVendors[dateStr] };
+        });
+
+        const vendorResults = await Promise.all(vendorPromises);
+        const vendorMap: { [date: string]: VendorWithMenu[] } = {};
+        vendorResults.forEach(result => {
+            vendorMap[result.dateStr] = result.vendors;
+        });
+
+        // 根據描述匹配每個日期的品項
+        datesToProcess.forEach(dateStr => {
+            const vendors = vendorMap[dateStr] || [];
+            
+            // 找到同一廠商的品項
+            let matchedItem: { vendorId: number; vendorName: string; vendorColor: string; itemId: number; itemName: string; itemDescription: string } | null = null;
+            
+            for (const v of vendors) {
+                if (v.vendor.id !== selection.vendor_id) continue;
+                
+                // 1. 優先用 item.id 直接匹配（適用於每天供應的品項）
+                for (const item of v.menu_items) {
+                    if (item.id === selection.vendor_menu_item_id) {
+                        matchedItem = {
+                            vendorId: v.vendor.id,
+                            vendorName: v.vendor.name,
+                            vendorColor: v.vendor.color,
+                            itemId: item.id,
+                            itemName: item.name,
+                            itemDescription: item.description,
+                        };
+                        break;
+                    }
+                }
+                
+                // 2. 如果 item.id 沒有匹配到，嘗試用 description 匹配（適用於每週不同的品項）
+                if (!matchedItem && selection.item_description) {
+                    for (const item of v.menu_items) {
+                        if (item.description === selection.item_description) {
+                            matchedItem = {
+                                vendorId: v.vendor.id,
+                                vendorName: v.vendor.name,
+                                vendorColor: v.vendor.color,
+                                itemId: item.id,
+                                itemName: item.name,
+                                itemDescription: item.description,
+                            };
+                            break;
+                        }
+                    }
+                }
+                
+                if (matchedItem) break;
+            }
+
+            if (matchedItem) {
+                newSelections[dateStr] = {
+                    date: dateStr,
+                    vendor_id: matchedItem.vendorId,
+                    vendor_menu_item_id: matchedItem.itemId,
+                    vendor_name: matchedItem.vendorName,
+                    vendor_color: matchedItem.vendorColor,
+                    item_name: matchedItem.itemName,
+                    item_description: matchedItem.itemDescription,
+                    is_no_order: false,
+                };
+                count++;
+            } else if (selection.is_no_order) {
+                // 不訂餐的情況
+                newSelections[dateStr] = { ...selection, date: dateStr };
+                count++;
+            } else {
+                skipped++;
+            }
+        });
+
+        // 更新已載入的廠商資料到 state
+        setAvailableVendors(prev => ({ ...prev, ...vendorMap }));
         setSelections(newSelections);
-        showToast(`已套用到本月 ${count} 天`, "success");
+        
+        if (skipped > 0) {
+            showToast(`已套用到本月 ${count} 天，${skipped} 天無匹配品項已跳過`, "info");
+        } else {
+            showToast(`已套用到本月 ${count} 天`, "success");
+        }
     };
 
-    const applySelectionToQuarter = (selection: DaySelection) => {
+    const applySelectionToQuarter = async (selection: DaySelection) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0); // 重置時間為 00:00:00
         const endDate = new Date(today.getFullYear(), today.getMonth() + 3 + 1, 0); // 往後推 3 個月的最後一天
         endDate.setHours(23, 59, 59, 999); // 確保包含最後一天
         const newSelections = { ...selections };
         let count = 0;
+        let skipped = 0;
 
-        // 從今天開始，到往後 3 個月的最後一天
+        // 取得所有需要訂餐的日期
+        const datesToProcess: string[] = [];
         for (let date = new Date(today); date <= endDate; date.setDate(date.getDate() + 1)) {
-            const dateStr = formatDate(new Date(date));
-
-            if (isDatePast(new Date(date)) || isWeekend(new Date(date)) || existingOrders[dateStr]) continue;
-
-            newSelections[dateStr] = { ...selection, date: dateStr };
-            count++;
+            const currentDate = new Date(date);
+            const dateStr = formatDate(currentDate);
+            if (isDatePast(currentDate) || isWeekend(currentDate) || existingOrders[dateStr]) continue;
+            datesToProcess.push(dateStr);
         }
 
+        // 批次載入所有日期的可用廠商
+        const vendorPromises = datesToProcess.map(async (dateStr) => {
+            if (!availableVendors[dateStr]) {
+                try {
+                    const vendors = await api.get(`/vendors/available/${dateStr}`, token!);
+                    return { dateStr, vendors };
+                } catch {
+                    return { dateStr, vendors: [] };
+                }
+            }
+            return { dateStr, vendors: availableVendors[dateStr] };
+        });
+
+        const vendorResults = await Promise.all(vendorPromises);
+        const vendorMap: { [date: string]: VendorWithMenu[] } = {};
+        vendorResults.forEach(result => {
+            vendorMap[result.dateStr] = result.vendors;
+        });
+
+        // 根據描述匹配每個日期的品項
+        datesToProcess.forEach(dateStr => {
+            const vendors = vendorMap[dateStr] || [];
+            
+            // 找到同一廠商的品項
+            let matchedItem: { vendorId: number; vendorName: string; vendorColor: string; itemId: number; itemName: string; itemDescription: string } | null = null;
+            
+            for (const v of vendors) {
+                if (v.vendor.id !== selection.vendor_id) continue;
+                
+                // 1. 優先用 item.id 直接匹配（適用於每天供應的品項）
+                for (const item of v.menu_items) {
+                    if (item.id === selection.vendor_menu_item_id) {
+                        matchedItem = {
+                            vendorId: v.vendor.id,
+                            vendorName: v.vendor.name,
+                            vendorColor: v.vendor.color,
+                            itemId: item.id,
+                            itemName: item.name,
+                            itemDescription: item.description,
+                        };
+                        break;
+                    }
+                }
+                
+                // 2. 如果 item.id 沒有匹配到，嘗試用 description 匹配（適用於每週不同的品項）
+                if (!matchedItem && selection.item_description) {
+                    for (const item of v.menu_items) {
+                        if (item.description === selection.item_description) {
+                            matchedItem = {
+                                vendorId: v.vendor.id,
+                                vendorName: v.vendor.name,
+                                vendorColor: v.vendor.color,
+                                itemId: item.id,
+                                itemName: item.name,
+                                itemDescription: item.description,
+                            };
+                            break;
+                        }
+                    }
+                }
+                
+                if (matchedItem) break;
+            }
+
+            if (matchedItem) {
+                newSelections[dateStr] = {
+                    date: dateStr,
+                    vendor_id: matchedItem.vendorId,
+                    vendor_menu_item_id: matchedItem.itemId,
+                    vendor_name: matchedItem.vendorName,
+                    vendor_color: matchedItem.vendorColor,
+                    item_name: matchedItem.itemName,
+                    item_description: matchedItem.itemDescription,
+                    is_no_order: false,
+                };
+                count++;
+            } else if (selection.is_no_order) {
+                // 不訂餐的情況
+                newSelections[dateStr] = { ...selection, date: dateStr };
+                count++;
+            } else {
+                skipped++;
+            }
+        });
+
+        // 更新已載入的廠商資料到 state
+        setAvailableVendors(prev => ({ ...prev, ...vendorMap }));
         setSelections(newSelections);
+
         const endMonth = endDate.getMonth() + 1;
-        showToast(`已套用到 ${endMonth} 月底，共 ${count} 天`, "success");
+        if (skipped > 0) {
+            showToast(`已套用到 ${endMonth} 月底，共 ${count} 天，${skipped} 天無匹配品項已跳過`, "info");
+        } else {
+            showToast(`已套用到 ${endMonth} 月底，共 ${count} 天`, "success");
+        }
     };
 
-    const applyWeekPatternToMonth = () => {
+    const applyWeekPatternToMonth = async () => {
         // Find pattern from current selections
         const pattern: { [dayOfWeek: number]: DaySelection } = {};
         Object.values(selections).forEach(sel => {
@@ -230,26 +415,119 @@ export const CalendarOrdering: React.FC = () => {
         const days = getCalendarDays();
         const newSelections = { ...selections };
         let count = 0;
+        let skipped = 0;
 
+        // 取得所有需要訂餐的日期
+        const datesToProcess: { dateStr: string; dayOfWeek: number }[] = [];
         days.forEach(day => {
             if (!day) return;
             const dayOfWeek = day.getDay();
             const template = pattern[dayOfWeek];
-
             if (!template) return;
 
             const dateStr = formatDate(day);
             if (isDatePast(day) || isWeekend(day) || existingOrders[dateStr]) return;
-
-            newSelections[dateStr] = { ...template, date: dateStr };
-            count++;
+            datesToProcess.push({ dateStr, dayOfWeek });
         });
 
+        // 批次載入所有日期的可用廠商
+        const vendorPromises = datesToProcess.map(async ({ dateStr }) => {
+            if (!availableVendors[dateStr]) {
+                try {
+                    const vendors = await api.get(`/vendors/available/${dateStr}`, token!);
+                    return { dateStr, vendors };
+                } catch {
+                    return { dateStr, vendors: [] };
+                }
+            }
+            return { dateStr, vendors: availableVendors[dateStr] };
+        });
+
+        const vendorResults = await Promise.all(vendorPromises);
+        const vendorMap: { [date: string]: VendorWithMenu[] } = {};
+        vendorResults.forEach(result => {
+            vendorMap[result.dateStr] = result.vendors;
+        });
+
+        // 根據描述匹配每個日期的品項
+        datesToProcess.forEach(({ dateStr, dayOfWeek }) => {
+            const template = pattern[dayOfWeek];
+            const vendors = vendorMap[dateStr] || [];
+            
+            // 找到同一廠商的品項
+            let matchedItem: { vendorId: number; vendorName: string; vendorColor: string; itemId: number; itemName: string; itemDescription: string } | null = null;
+            
+            for (const v of vendors) {
+                if (v.vendor.id !== template.vendor_id) continue;
+                
+                // 1. 優先用 item.id 直接匹配（適用於每天供應的品項）
+                for (const item of v.menu_items) {
+                    if (item.id === template.vendor_menu_item_id) {
+                        matchedItem = {
+                            vendorId: v.vendor.id,
+                            vendorName: v.vendor.name,
+                            vendorColor: v.vendor.color,
+                            itemId: item.id,
+                            itemName: item.name,
+                            itemDescription: item.description,
+                        };
+                        break;
+                    }
+                }
+                
+                // 2. 如果 item.id 沒有匹配到，嘗試用 description 匹配（適用於每週不同的品項）
+                if (!matchedItem && template.item_description) {
+                    for (const item of v.menu_items) {
+                        if (item.description === template.item_description) {
+                            matchedItem = {
+                                vendorId: v.vendor.id,
+                                vendorName: v.vendor.name,
+                                vendorColor: v.vendor.color,
+                                itemId: item.id,
+                                itemName: item.name,
+                                itemDescription: item.description,
+                            };
+                            break;
+                        }
+                    }
+                }
+                
+                if (matchedItem) break;
+            }
+
+            if (matchedItem) {
+                newSelections[dateStr] = {
+                    date: dateStr,
+                    vendor_id: matchedItem.vendorId,
+                    vendor_menu_item_id: matchedItem.itemId,
+                    vendor_name: matchedItem.vendorName,
+                    vendor_color: matchedItem.vendorColor,
+                    item_name: matchedItem.itemName,
+                    item_description: matchedItem.itemDescription,
+                    is_no_order: false,
+                };
+                count++;
+            } else if (template.is_no_order) {
+                // 不訂餐的情況
+                newSelections[dateStr] = { ...template, date: dateStr };
+                count++;
+            } else {
+                skipped++;
+            }
+        });
+
+        // 更新已載入的廠商資料到 state
+        setAvailableVendors(prev => ({ ...prev, ...vendorMap }));
         setSelections(newSelections);
-        showToast(`已套用週範本到本月 ${count} 天`, "success");
+
+        if (skipped > 0) {
+            showToast(`已套用週範本到本月 ${count} 天，${skipped} 天無匹配品項已跳過`, "info");
+        } else {
+            showToast(`已套用週範本到本月 ${count} 天`, "success");
+        }
     };
 
-    const applyWeekPatternToQuarter = () => {
+    const applyWeekPatternToQuarter = async () => {
         const pattern: { [dayOfWeek: number]: DaySelection } = {};
         Object.values(selections).forEach(sel => {
             const date = new Date(sel.date);
@@ -267,8 +545,10 @@ export const CalendarOrdering: React.FC = () => {
         endDate.setHours(23, 59, 59, 999); // 確保包含最後一天
         const newSelections = { ...selections };
         let count = 0;
+        let skipped = 0;
 
-        // 從今天開始，到往後 3 個月的最後一天
+        // 取得所有需要訂餐的日期
+        const datesToProcess: { dateStr: string; dayOfWeek: number }[] = [];
         for (let date = new Date(today); date <= endDate; date.setDate(date.getDate() + 1)) {
             const currentDate = new Date(date);
             const dayOfWeek = currentDate.getDay();
@@ -278,14 +558,105 @@ export const CalendarOrdering: React.FC = () => {
 
             const dateStr = formatDate(currentDate);
             if (isDatePast(currentDate) || isWeekend(currentDate) || existingOrders[dateStr]) continue;
-
-            newSelections[dateStr] = { ...template, date: dateStr };
-            count++;
+            datesToProcess.push({ dateStr, dayOfWeek });
         }
 
+        // 批次載入所有日期的可用廠商
+        const vendorPromises = datesToProcess.map(async ({ dateStr }) => {
+            if (!availableVendors[dateStr]) {
+                try {
+                    const vendors = await api.get(`/vendors/available/${dateStr}`, token!);
+                    return { dateStr, vendors };
+                } catch {
+                    return { dateStr, vendors: [] };
+                }
+            }
+            return { dateStr, vendors: availableVendors[dateStr] };
+        });
+
+        const vendorResults = await Promise.all(vendorPromises);
+        const vendorMap: { [date: string]: VendorWithMenu[] } = {};
+        vendorResults.forEach(result => {
+            vendorMap[result.dateStr] = result.vendors;
+        });
+
+        // 根據描述匹配每個日期的品項
+        datesToProcess.forEach(({ dateStr, dayOfWeek }) => {
+            const template = pattern[dayOfWeek];
+            const vendors = vendorMap[dateStr] || [];
+            
+            // 找到同一廠商的品項
+            let matchedItem: { vendorId: number; vendorName: string; vendorColor: string; itemId: number; itemName: string; itemDescription: string } | null = null;
+            
+            for (const v of vendors) {
+                if (v.vendor.id !== template.vendor_id) continue;
+                
+                // 1. 優先用 item.id 直接匹配（適用於每天供應的品項）
+                for (const item of v.menu_items) {
+                    if (item.id === template.vendor_menu_item_id) {
+                        matchedItem = {
+                            vendorId: v.vendor.id,
+                            vendorName: v.vendor.name,
+                            vendorColor: v.vendor.color,
+                            itemId: item.id,
+                            itemName: item.name,
+                            itemDescription: item.description,
+                        };
+                        break;
+                    }
+                }
+                
+                // 2. 如果 item.id 沒有匹配到，嘗試用 description 匹配（適用於每週不同的品項）
+                if (!matchedItem && template.item_description) {
+                    for (const item of v.menu_items) {
+                        if (item.description === template.item_description) {
+                            matchedItem = {
+                                vendorId: v.vendor.id,
+                                vendorName: v.vendor.name,
+                                vendorColor: v.vendor.color,
+                                itemId: item.id,
+                                itemName: item.name,
+                                itemDescription: item.description,
+                            };
+                            break;
+                        }
+                    }
+                }
+                
+                if (matchedItem) break;
+            }
+
+            if (matchedItem) {
+                newSelections[dateStr] = {
+                    date: dateStr,
+                    vendor_id: matchedItem.vendorId,
+                    vendor_menu_item_id: matchedItem.itemId,
+                    vendor_name: matchedItem.vendorName,
+                    vendor_color: matchedItem.vendorColor,
+                    item_name: matchedItem.itemName,
+                    item_description: matchedItem.itemDescription,
+                    is_no_order: false,
+                };
+                count++;
+            } else if (template.is_no_order) {
+                // 不訂餐的情況
+                newSelections[dateStr] = { ...template, date: dateStr };
+                count++;
+            } else {
+                skipped++;
+            }
+        });
+
+        // 更新已載入的廠商資料到 state
+        setAvailableVendors(prev => ({ ...prev, ...vendorMap }));
         setSelections(newSelections);
+
         const endMonth = endDate.getMonth() + 1;
-        showToast(`已套用週範本到 ${endMonth} 月底，共 ${count} 天`, "success");
+        if (skipped > 0) {
+            showToast(`已套用週範本到 ${endMonth} 月底，共 ${count} 天，${skipped} 天無匹配品項已跳過`, "info");
+        } else {
+            showToast(`已套用週範本到 ${endMonth} 月底，共 ${count} 天`, "success");
+        }
     };
 
     const [clearRange, setClearRange] = useState<{ start: string, end: string }>({ start: "", end: "" });
@@ -360,14 +731,27 @@ export const CalendarOrdering: React.FC = () => {
 
     // Helper functions
     const isDatePast = (date: Date) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const target = new Date(date);
-        target.setHours(0, 0, 0, 0);
-
-        if (target < today) return true;
-        if (target.getTime() === today.getTime()) {
-            return new Date().getHours() >= 9;
+        const taiwanTimeZone = 'Asia/Taipei';
+        const now = new Date();
+        
+        // 取得台灣時間的日期字串 (YYYY-MM-DD)
+        const taiwanTodayStr = now.toLocaleDateString('sv-SE', { timeZone: taiwanTimeZone });
+        
+        // 取得台灣時間的當前小時
+        const taiwanHour = parseInt(
+            now.toLocaleTimeString('en-US', { 
+                timeZone: taiwanTimeZone, 
+                hour: 'numeric', 
+                hour12: false 
+            })
+        );
+        
+        // 格式化目標日期
+        const targetStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        
+        if (targetStr < taiwanTodayStr) return true;
+        if (targetStr === taiwanTodayStr) {
+            return taiwanHour >= 9;
         }
         return false;
     };
@@ -425,15 +809,12 @@ export const CalendarOrdering: React.FC = () => {
     };
 
     const submitOrders = async () => {
-        console.log("Current selections:", selections);
         const ordersToCreate = Object.values(selections).map((sel) => ({
             order_date: sel.date,
             vendor_id: sel.vendor_id,
             vendor_menu_item_id: sel.vendor_menu_item_id,
             is_no_order: sel.is_no_order
         }));
-
-        console.log("Orders to create:", ordersToCreate);
 
         if (ordersToCreate.length === 0) {
             showToast("請先選擇要訂餐的日期", "info");
@@ -443,7 +824,6 @@ export const CalendarOrdering: React.FC = () => {
         try {
             setSubmitting(true);
             const result = await api.post("/orders/batch", { orders: ordersToCreate }, token!);
-            console.log("Batch order result:", result);
             showToast(`成功儲存 ${result.length} 天的餐點`, "success");
             setSelections({});
             loadExistingOrders();

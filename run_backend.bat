@@ -1,5 +1,8 @@
 @echo off
 call .venv\Scripts\activate
-python run.py
+
+call pip install -r requirements.txt
+
+call python run.py
 
 

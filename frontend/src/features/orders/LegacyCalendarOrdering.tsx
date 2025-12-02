@@ -55,6 +55,7 @@ interface DayOrder {
         vendor_id: number;
         vendor_name: string;
         menu_item_name: string;
+        menu_item_description?: string;
         is_no_order?: boolean;
     };
     selectedMealIndex?: number; // Index of selected meal option
@@ -177,14 +178,27 @@ export const LegacyCalendarOrdering: React.FC = () => {
     };
 
     const isDatePast = (date: Date) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const target = new Date(date);
-        target.setHours(0, 0, 0, 0);
-
-        if (target < today) return true;
-        if (target.getTime() === today.getTime()) {
-            return new Date().getHours() >= 9;
+        const taiwanTimeZone = 'Asia/Taipei';
+        const now = new Date();
+        
+        // 取得台灣時間的日期字串 (YYYY-MM-DD)
+        const taiwanTodayStr = now.toLocaleDateString('sv-SE', { timeZone: taiwanTimeZone });
+        
+        // 取得台灣時間的當前小時
+        const taiwanHour = parseInt(
+            now.toLocaleTimeString('en-US', { 
+                timeZone: taiwanTimeZone, 
+                hour: 'numeric', 
+                hour12: false 
+            })
+        );
+        
+        // 格式化目標日期
+        const targetStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        
+        if (targetStr < taiwanTodayStr) return true;
+        if (targetStr === taiwanTodayStr) {
+            return taiwanHour >= 9;
         }
         return false;
     };
@@ -223,6 +237,7 @@ export const LegacyCalendarOrdering: React.FC = () => {
                     vendor_id: existing.vendor_id,
                     vendor_name: existing.vendor_name || "不訂餐",
                     menu_item_name: existing.menu_item_name || "不訂餐",
+                    menu_item_description: existing.menu_item_description,
                     is_no_order: existing.is_no_order
                 } : undefined,
             });
@@ -255,6 +270,7 @@ export const LegacyCalendarOrdering: React.FC = () => {
     };
 
     // 全月訂餐 - 可以取代已儲存的訂單（除了已過期的）
+    // 根據品項描述來匹配每個日期對應的品項
     const selectAllForMonth = async () => {
         if (selectedMealType === null) {
             showToast("請先選擇訂餐方式", "error");
@@ -290,17 +306,95 @@ export const LegacyCalendarOrdering: React.FC = () => {
                 await Promise.all(ordersToDelete.map(id => api.delete(`/orders/${id}`, token!)));
             }
 
-            // 2. 建立新訂單
-            const ordersToCreate = datesToOrder.map(date => ({
-                order_date: date,
-                vendor_id: meal.vendor_id,
-                vendor_menu_item_id: meal.item_id,
-                is_no_order: false,
-            }));
+            // 2. 批次載入所有日期的可用廠商
+            const vendorPromises = datesToOrder.map(async (dateStr) => {
+                try {
+                    const vendors = await api.get(`/vendors/available/${dateStr}`, token!);
+                    return { dateStr, vendors };
+                } catch {
+                    return { dateStr, vendors: [] };
+                }
+            });
+
+            const vendorResults = await Promise.all(vendorPromises);
+            const vendorMap: { [date: string]: VendorWithMenu[] } = {};
+            vendorResults.forEach(result => {
+                vendorMap[result.dateStr] = result.vendors;
+            });
+
+            // 3. 根據描述匹配每個日期的品項，建立訂單
+            const ordersToCreate: Array<{
+                order_date: string;
+                vendor_id: number;
+                vendor_menu_item_id: number;
+                is_no_order: boolean;
+            }> = [];
+            let skipped = 0;
+
+            datesToOrder.forEach(dateStr => {
+                const vendors = vendorMap[dateStr] || [];
+                
+                // 找到同一廠商的品項
+                let matchedItem: { vendorId: number; itemId: number } | null = null;
+                
+                for (const v of vendors) {
+                    if (v.vendor.id !== meal.vendor_id) continue;
+                    
+                    for (const item of v.menu_items) {
+                        // 1. 優先用 item.id 直接匹配（適用於每天供應的品項，item.id 在所有日期都相同）
+                        if (item.id === meal.item_id) {
+                            matchedItem = {
+                                vendorId: v.vendor.id,
+                                itemId: item.id,
+                            };
+                            break;
+                        }
+                    }
+                    
+                    // 2. 如果 item.id 沒有匹配到，嘗試用 description 匹配（適用於每週不同的品項）
+                    if (!matchedItem && meal.item_description) {
+                        for (const item of v.menu_items) {
+                            if (item.description === meal.item_description) {
+                                matchedItem = {
+                                    vendorId: v.vendor.id,
+                                    itemId: item.id,
+                                };
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (matchedItem) break;
+                }
+
+                if (matchedItem) {
+                    ordersToCreate.push({
+                        order_date: dateStr,
+                        vendor_id: matchedItem.vendorId,
+                        vendor_menu_item_id: matchedItem.itemId,
+                        is_no_order: false,
+                    });
+                } else {
+                    skipped++;
+                }
+            });
+
+            if (ordersToCreate.length === 0) {
+                showToast("沒有找到匹配的品項可訂餐", "info");
+                setSubmitting(false);
+                return;
+            }
 
             const result = await api.post("/orders/batch", { orders: ordersToCreate }, token!);
             
-            showToast(`成功訂餐 ${result.length} 天${ordersToDelete.length > 0 ? `（已取代 ${ordersToDelete.length} 筆原訂單）` : ""}`, "success");
+            let message = `成功訂餐 ${result.length} 天`;
+            if (ordersToDelete.length > 0) {
+                message += `（已取代 ${ordersToDelete.length} 筆原訂單）`;
+            }
+            if (skipped > 0) {
+                message += `，${skipped} 天無匹配品項已跳過`;
+            }
+            showToast(message, skipped > 0 ? "info" : "success");
             
             // 清除選擇並重新載入
             setDayOrders(prev => prev.map(day => ({ ...day, selectedMealIndex: undefined })));
@@ -777,10 +871,17 @@ export const LegacyCalendarOrdering: React.FC = () => {
                             <tbody>
                                 {dayOrders.map((day) => {
                                     const hasExisting = !!day.existingOrder;
+                                    // 優先用 description 匹配（適用於每週不同的品項）
+                                    // 否則用 item_name 匹配（適用於每天供應的品項）
                                     const existingMealIndex = hasExisting
                                         ? mealOptions.findIndex(m =>
                                             m.vendor_id === day.existingOrder?.vendor_id &&
-                                            m.item_name === day.existingOrder?.menu_item_name
+                                            (
+                                                // 1. 優先用 description 匹配
+                                                (day.existingOrder?.menu_item_description && m.item_description === day.existingOrder.menu_item_description) ||
+                                                // 2. 或用 item_name 精確匹配
+                                                m.item_name === day.existingOrder?.menu_item_name
+                                            )
                                         )
                                         : -1;
 
