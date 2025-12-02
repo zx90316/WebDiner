@@ -54,7 +54,10 @@ def get_sorted_users(db: Session, department_id: int) -> List[schemas.ExtensionD
 
 
 @router.get("/", response_model=schemas.ExtensionDirectory)
-def get_extension_directory(db: Session = Depends(get_db)):
+def get_extension_directory(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """
     取得完整的分機表資料
     
@@ -163,7 +166,10 @@ def get_extension_directory(db: Session = Depends(get_db)):
 
 
 @router.get("/divisions", response_model=List[schemas.Division])
-def get_divisions_for_directory(db: Session = Depends(get_db)):
+def get_divisions_for_directory(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """取得所有處別（含顯示位置資訊），用於管理介面"""
     return db.query(models.Division).filter(
         models.Division.is_active == True
@@ -174,7 +180,10 @@ def get_divisions_for_directory(db: Session = Depends(get_db)):
 
 
 @router.get("/departments", response_model=List[schemas.Department])
-def get_departments_for_directory(db: Session = Depends(get_db)):
+def get_departments_for_directory(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """取得所有部門（含顯示位置資訊），用於管理介面"""
     return db.query(models.Department).filter(
         models.Department.is_active == True
@@ -320,6 +329,10 @@ def batch_update_department_positions(
 
 
 @router.get("/users/{dept_id}", response_model=List[schemas.ExtensionDirectoryUser])
-def get_department_users(dept_id: int, db: Session = Depends(get_db)):
+def get_department_users(
+    dept_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """取得指定部門的使用者列表（已排序）"""
     return get_sorted_users(db, dept_id)

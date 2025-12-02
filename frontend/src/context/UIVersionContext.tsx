@@ -10,7 +10,7 @@ interface UIVersionContextType {
 
 const UIVersionContext = createContext<UIVersionContextType | undefined>(undefined);
 
-const UI_VERSION_KEY = "webdiner_ui_version";
+const UI_VERSION_KEY = "vscc_ui_version";
 
 export const UIVersionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [uiVersion, setUIVersionState] = useState<UIVersion>(() => {

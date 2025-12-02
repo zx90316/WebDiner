@@ -21,25 +21,14 @@ export const Navbar: React.FC = () => {
 
     const closeMobileMenu = () => setIsMobileMenuOpen(false);
 
-    // 未登入時顯示簡化的導航列（只有分機表）
+    // 未登入時顯示簡化的導航列
     if (!user) {
         return (
             <nav className="bg-white shadow-md">
                 <div className="container mx-auto px-4">
                     <div className="flex justify-between items-center h-16">
                         <div className="flex items-center space-x-4 md:space-x-8">
-                            <h1 className="text-xl font-bold text-blue-600">WebDiner</h1>
-                            <div className="hidden sm:flex space-x-4">
-                                <Link
-                                    to="/extension-directory"
-                                    className={`px-3 py-2 rounded-md text-sm font-medium ${isActive("/extension-directory")
-                                        ? "bg-blue-100 text-blue-700"
-                                        : "text-gray-700 hover:bg-gray-100"
-                                        }`}
-                                >
-                                    📞 分機表
-                                </Link>
-                            </div>
+                            <h1 className="text-xl font-bold text-blue-600">VSCC 伙食系統</h1>
                         </div>
                         <div className="flex items-center space-x-4">
                             <Link
@@ -48,36 +37,8 @@ export const Navbar: React.FC = () => {
                             >
                                 登入
                             </Link>
-                            {/* 移動端漢堡菜單按鈕 */}
-                            <button
-                                className="sm:hidden p-2 rounded-md hover:bg-gray-100"
-                                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                            >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    {isMobileMenuOpen ? (
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    ) : (
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                                    )}
-                                </svg>
-                            </button>
                         </div>
                     </div>
-                    {/* 移動端菜單（未登入） */}
-                    {isMobileMenuOpen && (
-                        <div className="sm:hidden pb-4 border-t">
-                            <Link
-                                to="/extension-directory"
-                                onClick={closeMobileMenu}
-                                className={`block px-3 py-2 rounded-md text-sm font-medium mt-2 ${isActive("/extension-directory")
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "text-gray-700 hover:bg-gray-100"
-                                    }`}
-                            >
-                                📞 分機表
-                            </Link>
-                        </div>
-                    )}
                 </div>
             </nav>
         );
@@ -88,7 +49,7 @@ export const Navbar: React.FC = () => {
             <div className="container mx-auto px-4">
                 <div className="flex justify-between items-center h-16">
                     <div className="flex items-center space-x-4 lg:space-x-8">
-                        <h1 className="text-lg md:text-xl font-bold text-blue-600">WebDiner</h1>
+                        <h1 className="text-lg md:text-xl font-bold text-blue-600">VSCC 伙食系統</h1>
                         {/* 桌面端導航連結 */}
                         <div className="hidden md:flex space-x-2 lg:space-x-4">
                             <Link

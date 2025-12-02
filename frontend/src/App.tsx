@@ -37,8 +37,14 @@ function App() {
             <Navbar />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
-              {/* 分機表 - 公開存取 */}
-              <Route path="/extension-directory" element={<ExtensionDirectory />} />
+              <Route
+                path="/extension-directory"
+                element={
+                  <ProtectedRoute>
+                    <ExtensionDirectory />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/"
                 element={

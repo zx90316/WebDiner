@@ -22,11 +22,11 @@ export const LoginPage: React.FC = () => {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-100">
             <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
-                <h2 className="text-2xl font-bold mb-6 text-center">VSCC WebDiner Login</h2>
+                <h2 className="text-2xl font-bold mb-6 text-center">VSCC 伙食系統 登入</h2>
                 {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
                 <form onSubmit={handleSubmit}>
                     <div className="mb-4">
-                        <label className="block text-gray-700 mb-2">Employee ID</label>
+                        <label className="block text-gray-700 mb-2">工號</label>
                         <input
                             type="text"
                             className="w-full p-2 border rounded"
@@ -36,7 +36,7 @@ export const LoginPage: React.FC = () => {
                         />
                     </div>
                     <div className="mb-6">
-                        <label className="block text-gray-700 mb-2">Password</label>
+                        <label className="block text-gray-700 mb-2">密碼</label>
                         <input
                             type="password"
                             className="w-full p-2 border rounded"
@@ -49,7 +49,7 @@ export const LoginPage: React.FC = () => {
                         type="submit"
                         className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
                     >
-                        Login
+                        登入
                     </button>
                 </form>
             </div>

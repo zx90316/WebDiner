@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../../components/Toast";
 import { Loading } from "../../components/Loading";
 
@@ -42,6 +43,7 @@ export const ExtensionDirectory: React.FC = () => {
     const [data, setData] = useState<ExtensionDirectoryData | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const { token } = useAuth();
     const { showToast } = useToast();
 
     useEffect(() => {
@@ -51,7 +53,7 @@ export const ExtensionDirectory: React.FC = () => {
     const loadDirectory = async () => {
         try {
             setLoading(true);
-            const result = await api.get("/extension-directory/");
+            const result = await api.get("/extension-directory/", token!);
             setData(result);
         } catch (error: any) {
             showToast(error.message || "載入分機表失敗", "error");
