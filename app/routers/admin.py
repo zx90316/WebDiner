@@ -18,7 +18,7 @@ from ..database import get_db
 
 def check_admin(user: models.User = Depends(get_current_user)):
     if not user.is_admin:
-        raise HTTPException(status_code=403, detail="Not authorized")
+        raise HTTPException(status_code=403, detail="權限不足")
     return user
 
 @router.get("/stats")
@@ -162,13 +162,13 @@ def get_users(skip: int = 0, limit: int = 200, db: Session = Depends(get_db), cu
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
     db_user = db.query(models.User).filter(models.User.employee_id == user.employee_id).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Employee ID already registered")
+        raise HTTPException(status_code=400, detail="此工號已註冊")
     
     hashed_password = get_password_hash(user.password)
     
     # Role validation: Only sysadmin can create admin/sysadmin
     if user.role in ["admin", "sysadmin"] and current_user.role != "sysadmin":
-        raise HTTPException(status_code=403, detail="Only System Admins can create admin users")
+        raise HTTPException(status_code=403, detail="只有系統管理員可以建立管理員帳號")
         
     # Default role if not provided or if restricted
     if not user.role:
@@ -195,11 +195,11 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current
 def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="找不到使用者")
     
     # Permission check: Admin cannot modify Admin/SysAdmin
     if current_user.role != "sysadmin" and db_user.role in ["admin", "sysadmin"]:
-        raise HTTPException(status_code=403, detail="Admins cannot modify other Admins or System Admins")
+        raise HTTPException(status_code=403, detail="管理員無法修改其他管理員或系統管理員")
 
     update_data = user_update.dict(exclude_unset=True)
     
@@ -207,7 +207,7 @@ def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Dep
     if "role" in update_data:
         new_role = update_data["role"]
         if new_role in ["admin", "sysadmin"] and current_user.role != "sysadmin":
-             raise HTTPException(status_code=403, detail="Only System Admins can assign admin roles")
+             raise HTTPException(status_code=403, detail="只有系統管理員可以指派管理員角色")
         
         # Sync is_admin for backward compatibility
         update_data["is_admin"] = (new_role in ["admin", "sysadmin"])
@@ -217,7 +217,7 @@ def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Dep
         # Only System Admin can change other users' passwords via this endpoint
         # Users should use /auth/change-password for their own password
         if current_user.role != "sysadmin":
-             raise HTTPException(status_code=403, detail="Only System Admins can reset user passwords")
+             raise HTTPException(status_code=403, detail="只有系統管理員可以重設使用者密碼")
 
         update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
         
@@ -232,11 +232,11 @@ def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Dep
 def delete_user(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="找不到使用者")
     
     # Permission check: Admin cannot delete Admin/SysAdmin
     if current_user.role != "sysadmin" and db_user.role in ["admin", "sysadmin"]:
-        raise HTTPException(status_code=403, detail="Admins cannot delete other Admins or System Admins")
+        raise HTTPException(status_code=403, detail="管理員無法刪除其他管理員或系統管理員")
     
     db.delete(db_user)
     db.commit()
@@ -257,7 +257,7 @@ def get_division_with_departments(division_id: int, db: Session = Depends(get_db
     """取得處別及其所屬部門"""
     division = db.query(models.Division).filter(models.Division.id == division_id).first()
     if not division:
-        raise HTTPException(status_code=404, detail="Division not found")
+        raise HTTPException(status_code=404, detail="找不到處別")
     
     departments = db.query(models.Department).filter(
         models.Department.division_id == division_id,
@@ -275,7 +275,7 @@ def create_division(division: schemas.DivisionCreate, db: Session = Depends(get_
     existing = db.query(models.Division).filter(models.Division.name == division.name).first()
     if existing:
         if existing.is_active:
-            raise HTTPException(status_code=400, detail="Division already exists")
+            raise HTTPException(status_code=400, detail="處別已存在")
         # Reactivate if was soft-deleted
         existing.is_active = True
         existing.display_column = division.display_column
@@ -305,7 +305,7 @@ def update_division(
     """更新處別資訊"""
     division = db.query(models.Division).filter(models.Division.id == division_id).first()
     if not division:
-        raise HTTPException(status_code=404, detail="Division not found")
+        raise HTTPException(status_code=404, detail="找不到處別")
     
     update_data = division_update.dict(exclude_unset=True)
     for key, value in update_data.items():
@@ -320,7 +320,7 @@ def delete_division(division_id: int, db: Session = Depends(get_db), current_use
     """刪除處別（軟刪除）"""
     division = db.query(models.Division).filter(models.Division.id == division_id).first()
     if not division:
-        raise HTTPException(status_code=404, detail="Division not found")
+        raise HTTPException(status_code=404, detail="找不到處別")
     
     # Check if there are departments under this division
     dept_count = db.query(models.Department).filter(
@@ -329,7 +329,7 @@ def delete_division(division_id: int, db: Session = Depends(get_db), current_use
     ).count()
     
     if dept_count > 0:
-        raise HTTPException(status_code=400, detail=f"Cannot delete division with {dept_count} active departments")
+        raise HTTPException(status_code=400, detail=f"無法刪除有 {dept_count} 個使用中部門的處別")
     
     division.is_active = False
     db.commit()
@@ -356,7 +356,7 @@ def create_department(dept: schemas.DepartmentCreate, db: Session = Depends(get_
     existing = db.query(models.Department).filter(models.Department.name == dept.name).first()
     if existing:
         if existing.is_active:
-            raise HTTPException(status_code=400, detail="Department already exists")
+            raise HTTPException(status_code=400, detail="部門已存在")
         # Reactivate if was soft-deleted
         existing.is_active = True
         existing.division_id = dept.division_id
@@ -388,7 +388,7 @@ def update_department(
     """更新部門資訊（含顯示位置）"""
     dept = db.query(models.Department).filter(models.Department.id == dept_id).first()
     if not dept:
-        raise HTTPException(status_code=404, detail="Department not found")
+        raise HTTPException(status_code=404, detail="找不到部門")
     
     update_data = dept_update.dict(exclude_unset=True)
     for key, value in update_data.items():
@@ -402,7 +402,7 @@ def update_department(
 def delete_department(dept_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
     dept = db.query(models.Department).filter(models.Department.id == dept_id).first()
     if not dept:
-        raise HTTPException(status_code=404, detail="Department not found")
+        raise HTTPException(status_code=404, detail="找不到部門")
     
     dept.is_active = False
     db.commit()
@@ -479,7 +479,7 @@ def update_user_order(
     # Check if user exists
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="找不到使用者")
 
     # Check for existing order
     existing_order = db.query(models.Order).filter(
@@ -494,7 +494,7 @@ def update_user_order(
         return {"message": "Order cancelled"}
 
     if not vendor_id or not item_id:
-         raise HTTPException(status_code=400, detail="Vendor ID and Item ID required")
+         raise HTTPException(status_code=400, detail="需要指定廠商和餐點品項")
 
     # Verify item exists
     menu_item = db.query(models.VendorMenuItem).filter(
@@ -503,7 +503,7 @@ def update_user_order(
     ).first()
     
     if not menu_item:
-        raise HTTPException(status_code=404, detail="Menu item not found")
+        raise HTTPException(status_code=404, detail="找不到餐點品項")
 
     if existing_order:
         existing_order.vendor_id = vendor_id
@@ -550,11 +550,11 @@ def delete_special_day(date_str: str, db: Session = Depends(get_db), current_use
     try:
         target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail="日期格式錯誤，請使用 YYYY-MM-DD 格式")
 
     db_day = db.query(SpecialDay).filter(SpecialDay.date == target_date).first()
     if not db_day:
-        raise HTTPException(status_code=404, detail="Special day not found")
+        raise HTTPException(status_code=404, detail="找不到特殊日期")
     
     db.delete(db_day)
     db.commit()

@@ -43,7 +43,7 @@ from ..database import get_db
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.employee_id == user.employee_id).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Employee ID already registered")
+        raise HTTPException(status_code=400, detail="此工號已註冊")
     
     hashed_password = get_password_hash(user.password)
     new_user = models.User(
@@ -65,7 +65,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect employee ID or password",
+            detail="工號或密碼錯誤",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -78,7 +78,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="無法驗證身份憑證",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
@@ -108,7 +108,7 @@ def change_password(
 ):
     """Allow authenticated users to change their own password"""
     if not verify_password(password_data.old_password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect old password")
+        raise HTTPException(status_code=400, detail="舊密碼錯誤")
     
     current_user.hashed_password = get_password_hash(password_data.new_password)
     db.commit()

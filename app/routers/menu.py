@@ -14,7 +14,7 @@ from ..database import get_db
 
 def check_admin(user: models.User = Depends(get_current_user)):
     if not user.is_admin:
-        raise HTTPException(status_code=403, detail="Not authorized")
+        raise HTTPException(status_code=403, detail="權限不足")
     return user
 
 @router.get("/", response_model=List[schemas.MenuItem])
@@ -34,7 +34,7 @@ def create_menu_item(item: schemas.MenuItemCreate, db: Session = Depends(get_db)
 def update_menu_item(item_id: int, item: schemas.MenuItemCreate, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
     db_item = db.query(models.MenuItem).filter(models.MenuItem.id == item_id).first()
     if not db_item:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail="找不到品項")
     
     for key, value in item.dict().items():
         setattr(db_item, key, value)
@@ -47,7 +47,7 @@ def update_menu_item(item_id: int, item: schemas.MenuItemCreate, db: Session = D
 def delete_menu_item(item_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_admin)):
     db_item = db.query(models.MenuItem).filter(models.MenuItem.id == item_id).first()
     if not db_item:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise HTTPException(status_code=404, detail="找不到品項")
     
     db_item.is_active = False # Soft delete
     db.commit()

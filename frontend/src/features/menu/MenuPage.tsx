@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import * as timeService from "../../lib/timeService";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../../components/Toast";
 import { Loading, LoadingButton } from "../../components/Loading";
@@ -19,11 +20,13 @@ interface CartItem extends MenuItem {
 export const MenuPage: React.FC = () => {
     const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
-    const [orderDate, setOrderDate] = useState<string>(new Date().toISOString().split("T")[0]);
     const { token, user } = useAuth();
     const { showToast } = useToast();
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+
+    // 使用統一的時間服務取得最小可選日期
+    const [orderDate, setOrderDate] = useState<string>(timeService.getMinOrderDate());
 
     useEffect(() => {
         loadMenu();
@@ -152,7 +155,7 @@ export const MenuPage: React.FC = () => {
                                     className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     value={orderDate}
                                     onChange={(e) => setOrderDate(e.target.value)}
-                                    min={new Date().toISOString().split("T")[0]}
+                                    min={timeService.getMinOrderDate()}
                                 />
                             </div>
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import * as timeService from "../../lib/timeService";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../../components/Toast";
 import { Loading, LoadingButton } from "../../components/Loading";
@@ -729,31 +730,9 @@ export const CalendarOrdering: React.FC = () => {
         }
     };
 
-    // Helper functions
+    // Helper functions - 使用統一的時間服務
     const isDatePast = (date: Date) => {
-        const taiwanTimeZone = 'Asia/Taipei';
-        const now = new Date();
-        
-        // 取得台灣時間的日期字串 (YYYY-MM-DD)
-        const taiwanTodayStr = now.toLocaleDateString('sv-SE', { timeZone: taiwanTimeZone });
-        
-        // 取得台灣時間的當前小時
-        const taiwanHour = parseInt(
-            now.toLocaleTimeString('en-US', { 
-                timeZone: taiwanTimeZone, 
-                hour: 'numeric', 
-                hour12: false 
-            })
-        );
-        
-        // 格式化目標日期
-        const targetStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        
-        if (targetStr < taiwanTodayStr) return true;
-        if (targetStr === taiwanTodayStr) {
-            return taiwanHour >= 9;
-        }
-        return false;
+        return timeService.isDatePast(date);
     };
 
     const isWeekend = (date: Date) => {
@@ -994,19 +973,8 @@ export const CalendarOrdering: React.FC = () => {
                                             const dateStr = formatDate(day);
                                             const isExpanded = expandedDate === dateStr;
 
-                                            // Check if date is past
-                                            const now = new Date();
-                                            const dayMidnight = new Date(day);
-                                            dayMidnight.setHours(0, 0, 0, 0);
-
-                                            let isPast = false;
-                                            if (dayMidnight < today) {
-                                                isPast = true;
-                                            } else if (dayMidnight.getTime() === today.getTime()) {
-                                                if (now.getHours() >= 9) {
-                                                    isPast = true;
-                                                }
-                                            }
+                                            // Check if date is past (使用台灣時區)
+                                            const isPast = isDatePast(day);
 
                                             const isDayWeekend = isWeekend(day);
                                             const hasOrder = existingOrders[dateStr];

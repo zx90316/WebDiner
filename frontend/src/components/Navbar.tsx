@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthContext";
 import { useUIVersion } from "../context/UIVersionContext";
+import { TimeDisplay } from "./TimeDisplay";
 
 export const Navbar: React.FC = () => {
     const { user, logout } = useAuth();
@@ -93,6 +94,10 @@ export const Navbar: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex items-center space-x-2 lg:space-x-4">
+                        {/* 時間顯示 - 桌面端 */}
+                        <div className="hidden lg:block border-r pr-4 mr-2">
+                            <TimeDisplay isSysAdmin={user.role === 'sysadmin'} />
+                        </div>
                         {/* UI 版本切換開關 - 桌面端 */}
                         <div className="hidden lg:flex items-center space-x-2 border-r pr-4 mr-2">
                             <span className="text-xs text-gray-500">介面:</span>
@@ -194,6 +199,10 @@ export const Navbar: React.FC = () => {
                         </div>
                         {/* 分隔線 */}
                         <div className="border-t mt-2 pt-2">
+                            {/* 時間顯示 - 移動端 */}
+                            <div className="px-3 py-2">
+                                <TimeDisplay isSysAdmin={user.role === 'sysadmin'} />
+                            </div>
                             {/* UI 版本切換 - 移動端 */}
                             <div className="flex items-center justify-between px-3 py-2">
                                 <span className="text-sm text-gray-600">介面版本</span>

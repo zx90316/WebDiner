@@ -11,7 +11,7 @@ router = APIRouter(
 
 def check_admin(user: models.User = Depends(get_current_user)):
     if not user.is_admin:
-        raise HTTPException(status_code=403, detail="Not authorized")
+        raise HTTPException(status_code=403, detail="權限不足")
     return user
 
 @router.get("/", response_model=list[schemas.Vendor])
@@ -25,7 +25,7 @@ def get_vendor(vendor_id: int, db: Session = Depends(get_db), current_user: mode
     """Get a specific vendor"""
     vendor = db.query(models.Vendor).filter(models.Vendor.id == vendor_id).first()
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail="找不到廠商")
     return vendor
 
 @router.post("/", response_model=schemas.Vendor)
@@ -34,7 +34,7 @@ def create_vendor(vendor: schemas.VendorCreate, db: Session = Depends(get_db), a
     # Check if vendor already exists
     existing = db.query(models.Vendor).filter(models.Vendor.name == vendor.name).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Vendor already exists")
+        raise HTTPException(status_code=400, detail="廠商已存在")
     
     db_vendor = models.Vendor(**vendor.dict())
     db.add(db_vendor)
@@ -47,7 +47,7 @@ def update_vendor(vendor_id: int, vendor: schemas.VendorCreate, db: Session = De
     """Update a vendor (Admin only)"""
     db_vendor = db.query(models.Vendor).filter(models.Vendor.id == vendor_id).first()
     if not db_vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail="找不到廠商")
     
     for key, value in vendor.dict().items():
         setattr(db_vendor, key, value)
@@ -61,7 +61,7 @@ def delete_vendor(vendor_id: int, db: Session = Depends(get_db), admin: models.U
     """Delete a vendor (Admin only)"""
     db_vendor = db.query(models.Vendor).filter(models.Vendor.id == vendor_id).first()
     if not db_vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail="找不到廠商")
     
     # Soft delete
     db_vendor.is_active = False
@@ -89,11 +89,11 @@ def create_vendor_menu_item(
     # Verify vendor exists
     vendor = db.query(models.Vendor).filter(models.Vendor.id == vendor_id).first()
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor not found")
+        raise HTTPException(status_code=404, detail="找不到廠商")
     
     # Validate weekday
     if menu_item.weekday is not None and (menu_item.weekday < 0 or menu_item.weekday > 6):
-        raise HTTPException(status_code=400, detail="Weekday must be between 0 (Monday) and 6 (Sunday), or null for all days")
+        raise HTTPException(status_code=400, detail="星期必須在 0（星期一）至 6（星期日）之間，或設為 null 表示每天供應")
     
     db_menu_item = models.VendorMenuItem(vendor_id=vendor_id, **menu_item.dict())
     db.add(db_menu_item)
@@ -116,11 +116,11 @@ def update_vendor_menu_item(
     ).first()
     
     if not db_item:
-        raise HTTPException(status_code=404, detail="Menu item not found")
+        raise HTTPException(status_code=404, detail="找不到餐點品項")
     
     # Validate weekday
     if menu_item.weekday is not None and (menu_item.weekday < 0 or menu_item.weekday > 4):
-        raise HTTPException(status_code=400, detail="Weekday must be between 0 (Monday) and 4 (Friday), or null for all days")
+        raise HTTPException(status_code=400, detail="星期必須在 0（星期一）至 4（星期五）之間，或設為 null 表示每天供應")
     
     for key, value in menu_item.dict().items():
         setattr(db_item, key, value)
@@ -143,7 +143,7 @@ def delete_vendor_menu_item(
     ).first()
     
     if not db_item:
-        raise HTTPException(status_code=404, detail="Menu item not found")
+        raise HTTPException(status_code=404, detail="找不到餐點品項")
     
     # Soft delete
     db_item.is_active = False
@@ -159,7 +159,7 @@ def get_available_vendors(order_date: str, db: Session = Depends(get_db), curren
     try:
         date_obj = datetime.strptime(order_date, "%Y-%m-%d").date()
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail="日期格式錯誤，請使用 YYYY-MM-DD 格式")
     
     weekday = date_obj.weekday()  # 0=Monday, 6=Sunday
     

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { api } from "../../lib/api";
+import * as timeService from "../../lib/timeService";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../../components/Toast";
 import { Loading } from "../../components/Loading";
@@ -177,30 +178,9 @@ export const LegacyCalendarOrdering: React.FC = () => {
         }
     };
 
+    // 使用統一的時間服務
     const isDatePast = (date: Date) => {
-        const taiwanTimeZone = 'Asia/Taipei';
-        const now = new Date();
-        
-        // 取得台灣時間的日期字串 (YYYY-MM-DD)
-        const taiwanTodayStr = now.toLocaleDateString('sv-SE', { timeZone: taiwanTimeZone });
-        
-        // 取得台灣時間的當前小時
-        const taiwanHour = parseInt(
-            now.toLocaleTimeString('en-US', { 
-                timeZone: taiwanTimeZone, 
-                hour: 'numeric', 
-                hour12: false 
-            })
-        );
-        
-        // 格式化目標日期
-        const targetStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        
-        if (targetStr < taiwanTodayStr) return true;
-        if (targetStr === taiwanTodayStr) {
-            return taiwanHour >= 9;
-        }
-        return false;
+        return timeService.isDatePast(date);
     };
 
     const isWeekend = (date: Date) => {

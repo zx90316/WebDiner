@@ -37,11 +37,11 @@ def check_cutoff(order_date: date):
     today_taiwan = now_taiwan.date()
     
     if order_date < today_taiwan:
-        raise HTTPException(status_code=400, detail="Cannot order for past dates")
+        raise HTTPException(status_code=400, detail="無法為過去的日期訂餐")
     
     if order_date == today_taiwan:
         if now_taiwan.time() > CUTOFF_TIME:
-            raise HTTPException(status_code=400, detail="Order cut-off time (9:00 AM) has passed for today")
+            raise HTTPException(status_code=400, detail="今日訂餐截止時間（早上 9:00）已過")
 
 @router.get("/special_days", response_model=List[schemas.SpecialDay])
 def get_public_special_days(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -52,7 +52,7 @@ def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db), curr
     """Create a new order"""
     # 1. Check Holiday/Weekend
     if is_holiday_or_weekend(order.order_date, db):
-        raise HTTPException(status_code=400, detail="Cannot order on weekends or holidays")
+        raise HTTPException(status_code=400, detail="週末或假日無法訂餐")
 
     # 2. Check Cut-off time
     check_cutoff(order.order_date)
@@ -60,27 +60,27 @@ def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db), curr
     # 3. Verify vendor exists
     if not order.is_no_order:
         if not order.vendor_id:
-             raise HTTPException(status_code=400, detail="Vendor ID required for normal orders")
+             raise HTTPException(status_code=400, detail="一般訂單需要指定廠商")
              
         vendor = db.query(models.Vendor).filter(models.Vendor.id == order.vendor_id).first()
         if not vendor or not vendor.is_active:
-            raise HTTPException(status_code=404, detail="Vendor not found or inactive")
+            raise HTTPException(status_code=404, detail="找不到廠商或廠商已停用")
         
         # 4. Verify menu item exists and belongs to vendor
         if not order.vendor_menu_item_id:
-             raise HTTPException(status_code=400, detail="Menu Item ID required for normal orders")
+             raise HTTPException(status_code=400, detail="一般訂單需要指定餐點品項")
 
         menu_item = db.query(models.VendorMenuItem).filter(
             models.VendorMenuItem.id == order.vendor_menu_item_id,
             models.VendorMenuItem.vendor_id == order.vendor_id
         ).first()
         if not menu_item or not menu_item.is_active:
-            raise HTTPException(status_code=404, detail="Menu item not found or inactive")
+            raise HTTPException(status_code=404, detail="找不到餐點品項或品項已停用")
         
         # 5. Check if menu item is available on this day
         weekday = order.order_date.weekday()
         if menu_item.weekday is not None and menu_item.weekday != weekday:
-            raise HTTPException(status_code=400, detail=f"This menu item is not available on {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'][weekday]}")
+            raise HTTPException(status_code=400, detail=f"此餐點品項在{['星期一', '星期二', '星期三', '星期四', '星期五'][weekday]}不供應")
     
     # 6. Check if order already exists for this date
     existing_order = db.query(models.Order).filter(
@@ -88,7 +88,7 @@ def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db), curr
         models.Order.order_date == order.order_date
     ).first()
     if existing_order:
-        raise HTTPException(status_code=400, detail="You already have an order for this date")
+        raise HTTPException(status_code=400, detail="您在此日期已有訂單")
     
     # 7. Create Order
     db_order = models.Order(
@@ -185,7 +185,7 @@ def create_batch_orders(batch: schemas.OrderBatchCreate, db: Session = Depends(g
                 db.refresh(order)
         except Exception as e:
             db.rollback()
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"資料庫錯誤：{str(e)}")
     
     return created_orders
 
@@ -228,7 +228,7 @@ def cancel_order(order_id: int, db: Session = Depends(get_db), current_user: mod
     """Cancel an order"""
     db_order = db.query(models.Order).filter(models.Order.id == order_id, models.Order.user_id == current_user.id).first()
     if not db_order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        raise HTTPException(status_code=404, detail="找不到訂單")
     
     # Check cancellation cut-off
     check_cutoff(db_order.order_date)

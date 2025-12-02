@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import * as timeService from "../../lib/timeService";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../../components/Toast";
 import { Loading } from "../../components/Loading";
@@ -39,27 +40,9 @@ export const MyOrders: React.FC = () => {
         }
     };
 
+    // 使用統一的時間服務
     const cancelOrder = async (orderId: number, orderDate: string) => {
-        const taiwanTimeZone = 'Asia/Taipei';
-        const now = new Date();
-        
-        // 取得台灣時間的日期字串 (YYYY-MM-DD)
-        const taiwanTodayStr = now.toLocaleDateString('sv-SE', { timeZone: taiwanTimeZone });
-        
-        // 取得台灣時間的當前小時
-        const taiwanHour = parseInt(
-            now.toLocaleTimeString('en-US', { 
-                timeZone: taiwanTimeZone, 
-                hour: 'numeric', 
-                hour12: false 
-            })
-        );
-
-        // Check if it's the same day and before 9:00 AM (Taiwan time)
-        const isSameDay = orderDate === taiwanTodayStr;
-        const isBeforeCutoff = taiwanHour < 9;
-
-        if (!isSameDay || !isBeforeCutoff) {
+        if (!timeService.canCancelOrder(orderDate)) {
             showToast("只能在訂單當天 9:00 前取消訂單", "error");
             return;
         }
@@ -78,25 +61,7 @@ export const MyOrders: React.FC = () => {
     };
 
     const canCancel = (orderDate: string) => {
-        const taiwanTimeZone = 'Asia/Taipei';
-        const now = new Date();
-        
-        // 取得台灣時間的日期字串 (YYYY-MM-DD)
-        const taiwanTodayStr = now.toLocaleDateString('sv-SE', { timeZone: taiwanTimeZone });
-        
-        // 取得台灣時間的當前小時
-        const taiwanHour = parseInt(
-            now.toLocaleTimeString('en-US', { 
-                timeZone: taiwanTimeZone, 
-                hour: 'numeric', 
-                hour12: false 
-            })
-        );
-
-        const isSameDay = orderDate === taiwanTodayStr;
-        const isBeforeCutoff = taiwanHour < 9;
-
-        return isSameDay && isBeforeCutoff;
+        return timeService.canCancelOrder(orderDate);
     };
 
     if (loading) {
