@@ -1,2 +1,0 @@
-export { ExtensionDirectory } from "./ExtensionDirectory";
-

@@ -1,8 +1,33 @@
+# Python
 /.pytest_cache
 /.venv
-/webdiner.db
 /__pycache__
 app/__pycache__/
+app/routers/__pycache__/
+
+# Database
+webdiner.db
 webdiner.db-shm
 webdiner.db-wal
-app/routers/__pycache__/
+
+# Visual Studio / .NET
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Node.js
+node_modules/
+dist/
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
