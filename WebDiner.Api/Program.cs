@@ -168,14 +168,13 @@ if (!app.Environment.IsDevelopment())
     app.MapFallbackToFile("index.html");
 }
 
-// Ensure database is created and seed data
+// Ensure database is created
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var dbContext = services.GetRequiredService<WebDinerDbContext>();
-    var passwordService = services.GetRequiredService<IPasswordService>();
     
-    DbInitializer.Initialize(dbContext, passwordService);
+    DbInitializer.Initialize(dbContext);
 }
 
 app.Run();
