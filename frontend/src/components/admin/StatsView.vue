@@ -1,26 +1,41 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import Loading from '@/components/Loading.vue'
 
+interface StatsItem {
+    name: string
+    description?: string
+    count: number
+    subtotal: number
+}
+
+interface StatsVendor {
+    name: string
+    total_orders: number
+    total_price: number
+    items: StatsItem[]
+}
+
+interface Stats {
+    total_orders: number
+    total_price: number
+    vendors: StatsVendor[]
+}
+
 const authStore = useAuthStore()
 const toastStore = useToastStore()
 
+const stats = ref<Stats | null>(null)
 const loading = ref(true)
-const stats = ref<any>(null)
-const startDate = ref('')
-const endDate = ref('')
+const selectedDate = ref(new Date().toISOString().split('T')[0])
 
 const loadStats = async () => {
     try {
         loading.value = true
-        let endpoint = '/admin/stats'
-        if (startDate.value && endDate.value) {
-            endpoint += `?start_date=${startDate.value}&end_date=${endDate.value}`
-        }
-        const data = await api.get(endpoint, authStore.token!)
+        const data = await api.get(`/admin/stats?date=${selectedDate.value}`, authStore.token!)
         stats.value = data
     } catch {
         toastStore.showToast('載入統計資料失敗', 'error')
@@ -29,74 +44,88 @@ const loadStats = async () => {
     }
 }
 
+watch(selectedDate, () => {
+    loadStats()
+})
+
 onMounted(() => {
-    const today = new Date()
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
-    startDate.value = firstDay.toISOString().split('T')[0]
-    endDate.value = today.toISOString().split('T')[0]
     loadStats()
 })
 </script>
 
 <template>
-    <div class="bg-white p-6 rounded-lg shadow">
-        <h2 class="text-2xl font-bold mb-6">統計資料</h2>
-
-        <div class="mb-6 flex flex-wrap gap-4 items-end">
-            <div>
-                <label class="block text-gray-700 mb-2 font-medium">開始日期</label>
-                <input v-model="startDate" type="date" class="p-2 border rounded" />
+    <Loading v-if="loading && !stats" />
+    <div v-else class="bg-white p-6 rounded-lg shadow">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <h2 class="text-2xl font-bold">訂單統計</h2>
+            <div class="flex items-center gap-4">
+                <input
+                    v-model="selectedDate"
+                    type="date"
+                    class="border rounded px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                    @click="loadStats"
+                    class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
+                >
+                    重新整理
+                </button>
             </div>
-            <div>
-                <label class="block text-gray-700 mb-2 font-medium">結束日期</label>
-                <input v-model="endDate" type="date" class="p-2 border rounded" />
-            </div>
-            <button
-                class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-                @click="loadStats"
-            >
-                查詢
-            </button>
         </div>
 
-        <Loading v-if="loading" />
-        <div v-else-if="stats" class="space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-blue-50 p-4 rounded-lg">
-                    <h3 class="text-lg font-bold text-blue-800">總訂單數</h3>
-                    <p class="text-3xl font-bold text-blue-600">{{ stats.total_orders || 0 }}</p>
+        <template v-if="stats">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-lg border border-blue-200">
+                    <h3 class="text-gray-600 text-sm font-medium mb-2">總訂單數</h3>
+                    <p class="text-4xl font-bold text-blue-700">{{ stats.total_orders }}</p>
                 </div>
-                <div class="bg-green-50 p-4 rounded-lg">
-                    <h3 class="text-lg font-bold text-green-800">訂餐人次</h3>
-                    <p class="text-3xl font-bold text-green-600">{{ stats.total_users || 0 }}</p>
-                </div>
-                <div class="bg-purple-50 p-4 rounded-lg">
-                    <h3 class="text-lg font-bold text-purple-800">廠商數</h3>
-                    <p class="text-3xl font-bold text-purple-600">{{ stats.total_vendors || 0 }}</p>
+                <div class="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-lg border border-green-200">
+                    <h3 class="text-gray-600 text-sm font-medium mb-2">總金額</h3>
+                    <p class="text-4xl font-bold text-green-700">${{ stats.total_price }}</p>
                 </div>
             </div>
 
-            <div v-if="stats.by_vendor" class="overflow-x-auto">
-                <h3 class="font-bold text-lg mb-3">各廠商訂單統計</h3>
-                <table class="w-full">
-                    <thead>
-                        <tr class="bg-gray-100 border-b">
-                            <th class="text-left p-3">廠商</th>
-                            <th class="text-right p-3">訂單數</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(count, vendor) in stats.by_vendor" :key="vendor" class="border-b">
-                            <td class="p-3">{{ vendor }}</td>
-                            <td class="p-3 text-right font-medium">{{ count }}</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="space-y-8">
+                <p v-if="stats.vendors.length === 0" class="text-gray-500 text-center py-8">此日期尚無訂單</p>
+                <div
+                    v-else
+                    v-for="vendor in stats.vendors"
+                    :key="vendor.name"
+                    class="border rounded-lg overflow-hidden"
+                >
+                    <div class="bg-gray-50 p-4 border-b flex justify-between items-center">
+                        <h3 class="text-lg font-bold text-gray-800">{{ vendor.name }}</h3>
+                        <div class="text-sm text-gray-600">
+                            <span class="mr-4">數量: {{ vendor.total_orders }}</span>
+                            <span class="font-bold text-green-700">總額: ${{ vendor.total_price }}</span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="bg-white border-b text-sm text-gray-500">
+                                    <th class="text-left p-3 font-medium">品項</th>
+                                    <th class="text-right p-3 font-medium">數量</th>
+                                    <th class="text-right p-3 font-medium">小計</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="item in vendor.items"
+                                    :key="item.name"
+                                    class="border-b last:border-0 hover:bg-gray-50"
+                                >
+                                    <td class="p-3 text-gray-800">
+                                        {{ item.description ? `${item.description} (${item.name})` : item.name }}
+                                    </td>
+                                    <td class="p-3 text-right font-medium">{{ item.count }}</td>
+                                    <td class="p-3 text-right text-gray-600">${{ item.subtotal }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div v-else class="text-center text-gray-500 py-8">
-            無統計資料
-        </div>
+        </template>
     </div>
 </template>
-

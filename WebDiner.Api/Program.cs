@@ -146,13 +146,27 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 
+// 在 Production 環境提供靜態檔案服務 (前端 SPA)
+if (!app.Environment.IsDevelopment())
+{
+    // 提供 wwwroot 中的靜態檔案
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
-// Root endpoint
-app.MapGet("/", () => new { message = "Welcome to VSCC-WebDiner API" });
+// Root endpoint (API 健康檢查)
+app.MapGet("/api", () => new { message = "Welcome to VSCC-WebDiner API", status = "healthy" });
+
+// SPA Fallback: 非 API 路徑且非靜態檔案，回傳 index.html
+if (!app.Environment.IsDevelopment())
+{
+    app.MapFallbackToFile("index.html");
+}
 
 // Ensure database is created and seed data
 using (var scope = app.Services.CreateScope())

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
@@ -30,13 +30,28 @@ const divisions = ref<Division[]>([])
 const loading = ref(true)
 const submitting = ref(false)
 const editingId = ref<number | null>(null)
+const divisionEditingId = ref<number | null>(null)
+const showDivisionSection = ref(false)
 
+// 新增部門表單
 const newDept = reactive({
     name: '',
     division_id: null as number | null,
     display_column: 0,
     display_order: 0,
 })
+
+// 編輯部門表單
+const editForm = reactive({
+    name: '',
+    division_id: null as number | null,
+    display_column: 0,
+    display_order: 0,
+})
+
+// 新增/編輯處別表單
+const newDivision = reactive({ name: '', display_order: 0 })
+const editDivision = reactive({ name: '', display_order: 0 })
 
 const loadData = async () => {
     try {
@@ -54,6 +69,7 @@ const loadData = async () => {
     }
 }
 
+// 部門 CRUD
 const handleSubmit = async () => {
     if (!newDept.name.trim()) {
         toastStore.showToast('請輸入部門名稱', 'error')
@@ -75,6 +91,32 @@ const handleSubmit = async () => {
     }
 }
 
+const handleEdit = (dept: Department) => {
+    editingId.value = dept.id
+    editForm.name = dept.name
+    editForm.division_id = dept.division_id
+    editForm.display_column = dept.display_column || 0
+    editForm.display_order = dept.display_order || 0
+}
+
+const handleUpdate = async () => {
+    if (!editForm.name.trim()) {
+        toastStore.showToast('部門名稱不可為空', 'error')
+        return
+    }
+    try {
+        submitting.value = true
+        await api.put(`/admin/departments/${editingId.value}`, editForm, authStore.token!)
+        toastStore.showToast('部門已更新', 'success')
+        editingId.value = null
+        loadData()
+    } catch (error: any) {
+        toastStore.showToast(error.message || '更新失敗', 'error')
+    } finally {
+        submitting.value = false
+    }
+}
+
 const handleDelete = async (id: number, name: string) => {
     if (!confirm(`確定要刪除「${name}」嗎？`)) return
     try {
@@ -86,9 +128,131 @@ const handleDelete = async (id: number, name: string) => {
     }
 }
 
-const getDivisionName = (divisionId: number | null) => {
-    if (!divisionId) return '未分類'
-    return divisions.value.find(d => d.id === divisionId)?.name || '未分類'
+// 處別 CRUD
+const handleDivisionSubmit = async () => {
+    if (!newDivision.name.trim()) {
+        toastStore.showToast('請輸入處別名稱', 'error')
+        return
+    }
+    try {
+        submitting.value = true
+        await api.post('/admin/divisions', newDivision, authStore.token!)
+        toastStore.showToast('處別已新增', 'success')
+        newDivision.name = ''
+        newDivision.display_order = 0
+        loadData()
+    } catch (error: any) {
+        toastStore.showToast(error.message || '操作失敗', 'error')
+    } finally {
+        submitting.value = false
+    }
+}
+
+const handleDivisionEdit = (division: Division) => {
+    divisionEditingId.value = division.id
+    editDivision.name = division.name
+    editDivision.display_order = division.display_order || 0
+}
+
+const handleDivisionUpdate = async () => {
+    if (!editDivision.name.trim()) {
+        toastStore.showToast('處別名稱不可為空', 'error')
+        return
+    }
+    try {
+        submitting.value = true
+        await api.put(`/admin/divisions/${divisionEditingId.value}`, editDivision, authStore.token!)
+        toastStore.showToast('處別已更新', 'success')
+        divisionEditingId.value = null
+        loadData()
+    } catch (error: any) {
+        toastStore.showToast(error.message || '更新失敗', 'error')
+    } finally {
+        submitting.value = false
+    }
+}
+
+const handleDivisionDelete = async (id: number, name: string) => {
+    const deptCount = departments.value.filter(d => d.division_id === id).length
+    if (deptCount > 0) {
+        toastStore.showToast(`無法刪除「${name}」：仍有 ${deptCount} 個部門屬於此處別`, 'error')
+        return
+    }
+    if (!confirm(`確定要刪除「${name}」嗎？`)) return
+    try {
+        await api.delete(`/admin/divisions/${id}`, authStore.token!)
+        toastStore.showToast('處別已刪除', 'success')
+        loadData()
+    } catch (error: any) {
+        toastStore.showToast(error.message || '刪除失敗', 'error')
+    }
+}
+
+const getDivision = (divisionId: number | null) => {
+    if (!divisionId) return null
+    return divisions.value.find((d) => d.id === divisionId) || null
+}
+
+// 排序後的處別
+const sortedDivisions = computed(() => {
+    return [...divisions.value].sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+})
+
+// 按欄位分組，再按處別分組
+const columnData = computed(() => {
+    const columns: Array<{ divisionId: number | null; divisionName: string; divisionOrder: number; departments: Department[] }[]> = [[], [], [], []]
+    
+    // 先按欄位分組
+    const deptsByColumn: Department[][] = [[], [], [], []]
+    departments.value.forEach(dept => {
+        const col = dept.display_column || 0
+        if (col >= 0 && col < 4) {
+            deptsByColumn[col].push(dept)
+        }
+    })
+
+    // 每欄內按處別分組
+    for (let col = 0; col < 4; col++) {
+        const colDepts = deptsByColumn[col]
+        const divisionGroups = new Map<number | null, Department[]>()
+        
+        colDepts.forEach(dept => {
+            const divId = dept.division_id
+            if (!divisionGroups.has(divId)) {
+                divisionGroups.set(divId, [])
+            }
+            divisionGroups.get(divId)!.push(dept)
+        })
+
+        // 轉換為陣列並排序
+        divisionGroups.forEach((depts, divId) => {
+            depts.sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+            const div = getDivision(divId)
+            columns[col].push({
+                divisionId: divId,
+                divisionName: div?.name || '未分類',
+                divisionOrder: div?.display_order ?? 999,
+                departments: depts,
+            })
+        })
+
+        // 處別排序：按 display_order 排序，未分類的放最後
+        columns[col].sort((a, b) => {
+            if (a.divisionId === null) return 1
+            if (b.divisionId === null) return -1
+            return a.divisionOrder - b.divisionOrder
+        })
+    }
+
+    return columns
+})
+
+const getDeptCountByDivision = (divisionId: number) => {
+    return departments.value.filter(d => d.division_id === divisionId).length
+}
+
+const getColumnDeptCount = (column: typeof columnData.value[0]) => {
+    return column.reduce((sum, g) => sum + g.departments.length, 0)
 }
 
 onMounted(() => {
@@ -99,15 +263,100 @@ onMounted(() => {
 <template>
     <Loading v-if="loading" />
     <div v-else class="space-y-6">
+        <!-- 處別管理區塊 (可收合) -->
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <button
+                @click="showDivisionSection = !showDivisionSection"
+                class="w-full px-6 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 flex items-center justify-between hover:from-indigo-100 hover:to-purple-100 transition"
+            >
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">🏛️</span>
+                    <div class="text-left">
+                        <h2 class="text-lg font-bold text-gray-800">處別管理</h2>
+                        <p class="text-sm text-gray-500">目前 {{ divisions.length }} 個處別</p>
+                    </div>
+                </div>
+                <span :class="['text-2xl transition-transform', showDivisionSection ? 'rotate-180' : '']">▼</span>
+            </button>
+
+            <div v-if="showDivisionSection" class="p-6 border-t space-y-4">
+                <form @submit.prevent="handleDivisionSubmit" class="flex gap-3 items-end bg-gray-50 p-4 rounded-lg">
+                    <div class="flex-1">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">處別名稱</label>
+                        <input
+                            v-model="newDivision.name"
+                            type="text"
+                            placeholder="例如：管理處、技術處"
+                            class="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500"
+                        />
+                    </div>
+                    <div class="w-20">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">排序</label>
+                        <input
+                            v-model.number="newDivision.display_order"
+                            type="number"
+                            min="0"
+                            class="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500"
+                        />
+                    </div>
+                    <LoadingButton
+                        type="submit"
+                        :loading="submitting"
+                        class="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600 transition h-[42px]"
+                    >
+                        新增處別
+                    </LoadingButton>
+                </form>
+
+                <div class="text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                    💡 排序數字越小，在同一欄內顯示越靠前（例如：車輛安全審驗中心=0, 管理處=1）
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                    <div
+                        v-for="division in sortedDivisions"
+                        :key="division.id"
+                        class="bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 flex items-center gap-2"
+                    >
+                        <template v-if="divisionEditingId === division.id">
+                            <input
+                                v-model="editDivision.name"
+                                type="text"
+                                class="w-28 p-1 border rounded text-sm"
+                                autofocus
+                            />
+                            <input
+                                v-model.number="editDivision.display_order"
+                                type="number"
+                                min="0"
+                                class="w-12 p-1 border rounded text-sm"
+                            />
+                            <button @click="handleDivisionUpdate" :disabled="submitting" class="text-indigo-600 hover:text-indigo-800 text-sm">✓</button>
+                            <button @click="divisionEditingId = null" class="text-gray-500 hover:text-gray-700 text-sm">✕</button>
+                        </template>
+                        <template v-else>
+                            <span class="text-xs bg-indigo-200 text-indigo-700 px-1.5 py-0.5 rounded font-mono">#{{ division.display_order || 0 }}</span>
+                            <span class="font-medium text-indigo-800">{{ division.name }}</span>
+                            <span class="text-xs text-gray-500">({{ getDeptCountByDivision(division.id) }})</span>
+                            <button @click="handleDivisionEdit(division)" class="text-indigo-600 hover:text-indigo-800 text-xs ml-1">編輯</button>
+                            <button @click="handleDivisionDelete(division.id, division.name)" class="text-red-500 hover:text-red-700 text-xs">刪除</button>
+                        </template>
+                    </div>
+                    <div v-if="divisions.length === 0" class="text-gray-500 py-2">尚無處別資料，請先新增處別</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 新增部門表單 -->
         <div class="bg-white p-6 rounded-lg shadow">
             <h2 class="text-xl font-bold mb-4">新增部門</h2>
-            <form class="flex flex-wrap gap-4 items-end" @submit.prevent="handleSubmit">
+            <form @submit.prevent="handleSubmit" class="flex flex-wrap gap-4 items-end">
                 <div class="flex-1 min-w-[200px]">
                     <label class="block text-sm font-medium text-gray-700 mb-1">部門名稱</label>
                     <input
                         v-model="newDept.name"
                         type="text"
-                        placeholder="例如：行政服務部"
+                        placeholder="例如：行政服務部、研究企畫一部"
                         class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
                     />
                 </div>
@@ -152,38 +401,131 @@ onMounted(() => {
             </form>
         </div>
 
+        <!-- 部門列表 - 分機表預覽佈局 -->
         <div class="bg-white p-6 rounded-lg shadow">
-            <h2 class="text-xl font-bold mb-4">部門列表</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="bg-gray-100 border-b">
-                            <th class="text-left p-3 font-semibold">部門名稱</th>
-                            <th class="text-left p-3 font-semibold">所屬處別</th>
-                            <th class="text-center p-3 font-semibold">顯示欄位</th>
-                            <th class="text-center p-3 font-semibold">排序</th>
-                            <th class="text-center p-3 font-semibold">操作</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="dept in departments" :key="dept.id" class="border-b hover:bg-gray-50">
-                            <td class="p-3 font-medium">{{ dept.name }}</td>
-                            <td class="p-3">{{ getDivisionName(dept.division_id) }}</td>
-                            <td class="p-3 text-center">第 {{ dept.display_column + 1 }} 欄</td>
-                            <td class="p-3 text-center">{{ dept.display_order }}</td>
-                            <td class="p-3 text-center">
-                                <button
-                                    class="text-red-600 hover:text-red-800"
-                                    @click="handleDelete(dept.id, dept.name)"
-                                >
-                                    刪除
-                                </button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold">📞 分機表佈局預覽</h2>
+                <p class="text-sm text-gray-500">共 {{ departments.length }} 個部門</p>
+            </div>
+            
+            <!-- 4欄佈局 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div v-for="(column, colIndex) in columnData" :key="colIndex" class="space-y-3">
+                    <!-- 欄位標題 -->
+                    <div class="bg-gray-100 rounded-lg px-3 py-2 text-center">
+                        <span class="font-bold text-gray-600">第 {{ colIndex + 1 }} 欄</span>
+                        <span class="text-xs text-gray-400 ml-2">
+                            ({{ getColumnDeptCount(column) }} 個部門)
+                        </span>
+                    </div>
+
+                    <!-- 處別分組 -->
+                    <div
+                        v-for="(group, groupIdx) in column"
+                        :key="groupIdx"
+                        class="bg-white rounded-lg border shadow-sm overflow-hidden"
+                    >
+                        <!-- 處別標題 -->
+                        <div
+                            :class="[
+                                'px-3 py-2 text-white font-medium',
+                                group.divisionId === null
+                                    ? 'bg-orange-500'
+                                    : 'bg-gradient-to-r from-blue-600 to-blue-700'
+                            ]"
+                        >
+                            {{ group.divisionName }}
+                        </div>
+
+                        <!-- 部門列表 -->
+                        <div class="divide-y">
+                            <div v-for="dept in group.departments" :key="dept.id" class="group">
+                                <!-- 編輯模式 -->
+                                <div v-if="editingId === dept.id" class="p-3 bg-blue-50 space-y-2">
+                                    <input
+                                        v-model="editForm.name"
+                                        type="text"
+                                        class="w-full p-1.5 border rounded text-sm"
+                                        autofocus
+                                    />
+                                    <div class="flex gap-2">
+                                        <select
+                                            v-model="editForm.division_id"
+                                            class="flex-1 p-1 border rounded text-xs"
+                                        >
+                                            <option :value="null">未分類</option>
+                                            <option v-for="div in divisions" :key="div.id" :value="div.id">{{ div.name }}</option>
+                                        </select>
+                                        <select
+                                            v-model="editForm.display_column"
+                                            class="w-20 p-1 border rounded text-xs"
+                                        >
+                                            <option :value="0">欄1</option>
+                                            <option :value="1">欄2</option>
+                                            <option :value="2">欄3</option>
+                                            <option :value="3">欄4</option>
+                                        </select>
+                                        <input
+                                            v-model.number="editForm.display_order"
+                                            type="number"
+                                            min="0"
+                                            class="w-14 p-1 border rounded text-xs"
+                                            placeholder="#"
+                                        />
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button
+                                            @click="handleUpdate"
+                                            :disabled="submitting"
+                                            class="flex-1 bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600"
+                                        >
+                                            儲存
+                                        </button>
+                                        <button
+                                            @click="editingId = null"
+                                            class="flex-1 bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-400"
+                                        >
+                                            取消
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- 顯示模式 -->
+                                <div v-else class="px-3 py-2 hover:bg-gray-50 flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-gray-400 font-mono">#{{ dept.display_order }}</span>
+                                        <span class="font-medium text-gray-700">{{ dept.name }}</span>
+                                    </div>
+                                    <div class="opacity-0 group-hover:opacity-100 flex gap-1 transition">
+                                        <button
+                                            @click="handleEdit(dept)"
+                                            class="text-blue-500 hover:text-blue-700 text-xs px-1"
+                                        >
+                                            編輯
+                                        </button>
+                                        <button
+                                            @click="handleDelete(dept.id, dept.name)"
+                                            class="text-red-500 hover:text-red-700 text-xs px-1"
+                                        >
+                                            刪除
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 空欄位提示 -->
+                    <div v-if="column.length === 0" class="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center text-gray-400">
+                        <div class="text-2xl mb-2">📭</div>
+                        <div class="text-sm">此欄尚無部門</div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="departments.length === 0" class="text-center text-gray-500 py-12">
+                <div class="text-4xl mb-4">🏢</div>
+                <div>尚無部門資料，請先新增部門</div>
             </div>
         </div>
     </div>
 </template>
-
