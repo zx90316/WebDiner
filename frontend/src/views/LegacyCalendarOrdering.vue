@@ -6,21 +6,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useToastStore } from '@/stores/toast'
 import Loading from '@/components/Loading.vue'
 
-interface VendorWithMenu {
-    vendor: {
-        id: number
-        name: string
-        description: string
-        color: string
-    }
-    menu_items: Array<{
-        id: number
-        name: string
-        description: string
-        price: number
-    }>
-}
-
 interface FullMenuItem {
     id: number
     name: string
@@ -37,6 +22,22 @@ interface VendorWithFullMenu {
     menu_items: FullMenuItem[]
 }
 
+// API /vendors/available/{date} 返回的類型
+interface AvailableVendorResponse {
+    vendor: {
+        id: number
+        name: string
+        description: string
+        color: string
+    }
+    menu_items: Array<{
+        id: number
+        name: string
+        description: string
+        price: number
+    }>
+}
+
 interface MealOption {
     vendor_id: number
     vendor_name: string
@@ -44,6 +45,7 @@ interface MealOption {
     item_id: number
     item_name: string
     item_description: string
+    is_weekday_group?: boolean // 是否為週別分組（每週不同品項，以 description 分組）
 }
 
 interface DayOrder {
@@ -68,7 +70,6 @@ const toastStore = useToastStore()
 const currentDate = new Date()
 const selectedYear = ref(currentDate.getFullYear())
 const selectedMonth = ref(currentDate.getMonth() + 1)
-const availableVendors = ref<VendorWithMenu[]>([])
 const vendorsWithFullMenu = ref<VendorWithFullMenu[]>([])
 const dayOrders = ref<DayOrder[]>([])
 const existingOrders = ref<{ [date: string]: any }>({})
@@ -91,17 +92,47 @@ const yearOptions = computed(() => {
 
 const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1)
 
+// 產生月曆訂餐選項
+// 1. 每天供應的品項（weekday = null）直接列為選項
+// 2. 每週特定日供應的品項（weekday !== null）按 description 分組，每組一個選項
 const mealOptions = computed<MealOption[]>(() => {
     const options: MealOption[] = []
-    availableVendors.value.forEach(v => {
-        v.menu_items.forEach(item => {
+    vendorsWithFullMenu.value.forEach(vendor => {
+        // 1. 每天供應的品項（weekday === null）
+        const dailyItems = vendor.menu_items.filter(item => item.weekday === null)
+        dailyItems.forEach(item => {
             options.push({
-                vendor_id: v.vendor.id,
-                vendor_name: v.vendor.name,
-                vendor_color: v.vendor.color,
+                vendor_id: vendor.id,
+                vendor_name: vendor.name,
+                vendor_color: vendor.color,
                 item_id: item.id,
                 item_name: item.name,
                 item_description: item.description,
+            })
+        })
+
+        // 2. 每週特定日供應的品項（weekday !== null），按 description 分組
+        const weekdayItems = vendor.menu_items.filter(item => item.weekday !== null)
+        const groupedByDescription: { [desc: string]: FullMenuItem[] } = {}
+        weekdayItems.forEach(item => {
+            const key = item.description || item.name
+            if (!groupedByDescription[key]) {
+                groupedByDescription[key] = []
+            }
+            groupedByDescription[key].push(item)
+        })
+
+        // 每個分組產生一個選項
+        Object.entries(groupedByDescription).forEach(([description, items]) => {
+            // 使用第一個品項的 ID 作為代表，實際訂餐時會用 description 匹配當天品項
+            options.push({
+                vendor_id: vendor.id,
+                vendor_name: vendor.name,
+                vendor_color: vendor.color,
+                item_id: items[0].id,
+                item_name: description,
+                item_description: description,
+                is_weekday_group: true,
             })
         })
     })
@@ -111,6 +142,29 @@ const mealOptions = computed<MealOption[]>(() => {
 const hasNewSelections = computed(() => {
     return dayOrders.value.some(day => day.selectedMealIndex !== undefined && !day.existingOrder && !day.isPast)
 })
+
+// 檢查某個日期是否有特定餐點選項可選
+const isMealAvailableForDate = (dateStr: string, meal: MealOption): boolean => {
+    // 非週別分組的選項永遠可選（每天供應）
+    if (!meal.is_weekday_group) return true
+    
+    // 計算該日期的 weekday（後端格式：0=週一, 1=週二, ..., 4=週五）
+    const date = new Date(dateStr)
+    const jsWeekday = date.getDay() // 0=週日, 1=週一, ..., 6=週六
+    const backendWeekday = jsWeekday === 0 ? -1 : jsWeekday - 1 // 週日轉為 -1（後端沒有週日）
+    
+    // 週末沒有餐點
+    if (backendWeekday < 0 || backendWeekday > 4) return false
+    
+    // 檢查該廠商是否有該 weekday 對應且 description 匹配的品項
+    const vendor = vendorsWithFullMenu.value.find(v => v.id === meal.vendor_id)
+    if (!vendor) return false
+    
+    return vendor.menu_items.some(item => 
+        item.weekday === backendWeekday && 
+        (item.description || item.name) === meal.item_description
+    )
+}
 
 const formatDate = (date: Date) => {
     const year = date.getFullYear()
@@ -129,21 +183,9 @@ const isWeekend = (date: Date) => {
     return date.getDay() === 0 || date.getDay() === 6
 }
 
-const loadVendorsForMonth = async () => {
-    try {
-        loading.value = true
-        const firstDay = `${selectedYear.value}-${String(selectedMonth.value).padStart(2, '0')}-01`
-        const vendors = await api.get(`/vendors/available/${firstDay}`, authStore.token!)
-        availableVendors.value = vendors
-    } catch {
-        toastStore.showToast('載入廠商失敗', 'error')
-    } finally {
-        loading.value = false
-    }
-}
-
 const loadAllVendorsWithFullMenu = async () => {
     try {
+        loading.value = true
         const vendors = await api.get('/vendors/', authStore.token!)
         const vendorsWithMenus: VendorWithFullMenu[] = await Promise.all(
             vendors.map(async (vendor: any) => {
@@ -156,7 +198,9 @@ const loadAllVendorsWithFullMenu = async () => {
         )
         vendorsWithFullMenu.value = vendorsWithMenus
     } catch {
-        console.error('Failed to load full vendor menus')
+        toastStore.showToast('載入廠商菜單失敗', 'error')
+    } finally {
+        loading.value = false
     }
 }
 
@@ -266,7 +310,7 @@ const selectAllForMonth = async () => {
         })
 
         const vendorResults = await Promise.all(vendorPromises)
-        const vendorMap: { [date: string]: VendorWithMenu[] } = {}
+        const vendorMap: { [date: string]: AvailableVendorResponse[] } = {}
         vendorResults.forEach(result => {
             vendorMap[result.dateStr] = result.vendors
         })
@@ -286,17 +330,8 @@ const selectAllForMonth = async () => {
             for (const v of vendors) {
                 if (v.vendor.id !== meal.vendor_id) continue
                 
-                for (const item of v.menu_items) {
-                    if (item.id === meal.item_id) {
-                        matchedItem = {
-                            vendorId: v.vendor.id,
-                            itemId: item.id,
-                        }
-                        break
-                    }
-                }
-                
-                if (!matchedItem && meal.item_description) {
+                // 週別分組選項：直接用 description 匹配當天的品項
+                if (meal.is_weekday_group) {
                     for (const item of v.menu_items) {
                         if (item.description === meal.item_description) {
                             matchedItem = {
@@ -304,6 +339,29 @@ const selectAllForMonth = async () => {
                                 itemId: item.id,
                             }
                             break
+                        }
+                    }
+                } else {
+                    // 非週別分組：先嘗試 item_id，再嘗試 description
+                    for (const item of v.menu_items) {
+                        if (item.id === meal.item_id) {
+                            matchedItem = {
+                                vendorId: v.vendor.id,
+                                itemId: item.id,
+                            }
+                            break
+                        }
+                    }
+                    
+                    if (!matchedItem && meal.item_description) {
+                        for (const item of v.menu_items) {
+                            if (item.description === meal.item_description) {
+                                matchedItem = {
+                                    vendorId: v.vendor.id,
+                                    itemId: item.id,
+                                }
+                                break
+                            }
                         }
                     }
                 }
@@ -426,18 +484,16 @@ const submitOrders = async () => {
 }
 
 watch([selectedYear, selectedMonth], () => {
-    loadVendorsForMonth()
     loadAllVendorsWithFullMenu()
     loadExistingOrders()
     loadSpecialDays()
 })
 
-watch([selectedYear, selectedMonth, availableVendors, existingOrders, specialDays], () => {
+watch([selectedYear, selectedMonth, vendorsWithFullMenu, existingOrders, specialDays], () => {
     generateDayOrders()
 }, { deep: true })
 
 onMounted(() => {
-    loadVendorsForMonth()
     loadAllVendorsWithFullMenu()
     loadExistingOrders()
     loadSpecialDays()
@@ -692,21 +748,24 @@ onMounted(() => {
                                     {{ day.dayOfWeek }}
                                 </td>
                                 <td
-                                    v-for="(_, mealIndex) in mealOptions"
+                                    v-for="(meal, mealIndex) in mealOptions"
                                     :key="mealIndex"
                                     style="border: 1px solid #ccc; padding: 8px; text-align: center"
                                 >
-                                    <input
-                                        type="checkbox"
-                                        :checked="day.selectedMealIndex === mealIndex || (!!day.existingOrder && mealOptions.findIndex(m =>
-                                            m.vendor_id === day.existingOrder?.vendor_id &&
-                                            ((day.existingOrder?.menu_item_description && m.item_description === day.existingOrder.menu_item_description) ||
-                                            m.item_name === day.existingOrder?.menu_item_name)
-                                        ) === mealIndex)"
-                                        :disabled="day.isPast || !!day.existingOrder"
-                                        :style="{ cursor: day.isPast || !!day.existingOrder ? 'not-allowed' : 'pointer' }"
-                                        @change="toggleDayMeal(day.date, mealIndex)"
-                                    />
+                                    <template v-if="isMealAvailableForDate(day.date, meal)">
+                                        <input
+                                            type="checkbox"
+                                            :checked="day.selectedMealIndex === mealIndex || (!!day.existingOrder && mealOptions.findIndex(m =>
+                                                m.vendor_id === day.existingOrder?.vendor_id &&
+                                                ((day.existingOrder?.menu_item_description && m.item_description === day.existingOrder.menu_item_description) ||
+                                                m.item_name === day.existingOrder?.menu_item_name)
+                                            ) === mealIndex)"
+                                            :disabled="day.isPast || !!day.existingOrder"
+                                            :style="{ cursor: day.isPast || !!day.existingOrder ? 'not-allowed' : 'pointer' }"
+                                            @change="toggleDayMeal(day.date, mealIndex)"
+                                        />
+                                    </template>
+                                    <span v-else style="color: #999">-</span>
                                 </td>
                                 <td style="border: 1px solid #ccc; padding: 8px; text-align: center">
                                     <button
