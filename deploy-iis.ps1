@@ -30,6 +30,10 @@ New-Item -ItemType Directory -Path $PublishDir | Out-Null
 if (-not $SkipFrontend) {
     Write-Host ""
     Write-Host "[2/4] 建置前端 (npm run build)..." -ForegroundColor Yellow
+    
+    # 設定 Node.js 跳過平台檢查 (Windows Server 2012 等舊版系統需要)
+    $env:NODE_SKIP_PLATFORM_CHECK = "1"
+    
     Push-Location $FrontendDir
     try {
         npm install

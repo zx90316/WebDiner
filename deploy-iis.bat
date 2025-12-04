@@ -1,5 +1,6 @@
 @echo off
-chcp 65001 >nul
+chcp 65001
+echo.
 echo ================================================
 echo VSCC-WebDiner IIS 部署腳本
 echo ================================================
@@ -9,6 +10,9 @@ echo.
 set PUBLISH_DIR=publish
 set FRONTEND_DIR=frontend
 set API_DIR=WebDiner.Api
+
+:: 設定 Node.js 跳過平台檢查 (Windows Server 2012 等舊版系統需要)
+set NODE_SKIP_PLATFORM_CHECK=1
 
 :: 1. 清理舊的發布目錄
 echo [1/4] 清理舊的發布目錄...
