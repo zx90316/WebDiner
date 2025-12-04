@@ -8,8 +8,6 @@
 - Windows Server 2019+ 或 Windows 10/11
 - IIS 10+ 並啟用以下功能：
   - ASP.NET Core Module (ANCM)
-  - URL Rewrite Module 2.1+
-- .NET 8.0 Runtime (Hosting Bundle)
 - SQL Server 2019+ (或 SQL Server Express)
 
 ### 開發/建置環境
@@ -22,106 +20,130 @@
 部署後的架構為 **整合模式**：
 
 ```
-IIS 網站
-├── WebDiner.Api.dll      (後端 .NET API)
+IIS 網站 (C:\web\WebDiner\publish)
+├── WebDiner.Api.exe      (獨立部署執行檔)
+├── WebDiner.Api.dll      (主程式)
+├── *.dll                 (所有依賴 DLL，包含 .NET Runtime)
 ├── wwwroot/              (前端靜態檔案)
 │   ├── index.html
 │   ├── assets/
 │   └── ...
 ├── web.config            (IIS 配置)
-└── appsettings.json      (應用程式配置)
+├── appsettings.json      (應用程式配置)
+└── logs/                 (日誌目錄)
 ```
 
 所有請求都由 .NET 應用程式處理：
 - `/api/*` → API Controller 處理
 - 其他請求 → 返回 `wwwroot/index.html` (SPA)
 
-## 部署步驟
+---
 
-### 步驟 1: 安裝必要軟體
+## 🚀 快速部署 (獨立部署模式 - 推薦)
 
-1. **安裝 .NET 8.0 Hosting Bundle**
-   - 下載: https://dotnet.microsoft.com/download/dotnet/8.0
-   - 選擇 "Hosting Bundle" (包含 Runtime + ANCM)
-   - 安裝後重啟 IIS
+獨立部署不需要在伺服器上安裝 .NET Runtime，所有依賴都包含在發布資料夾中。
 
-2. **安裝 URL Rewrite Module**
-   - 下載: https://www.iis.net/downloads/microsoft/url-rewrite
-   - 安裝後重啟 IIS
+### 步驟 1：在開發電腦建置
 
-3. **確認安裝**
-   ```powershell
-   # 檢查 .NET Runtime
-   dotnet --list-runtimes
-   
-   # 應該看到類似:
-   # Microsoft.AspNetCore.App 8.0.x
-   # Microsoft.NETCore.App 8.0.x
-   ```
-
-### 步驟 2: 建置應用程式
-
-#### 方法 A: 使用部署腳本 (推薦)
+#### 方法 A：命令列發布
 
 ```powershell
-# PowerShell
-.\deploy-iis.ps1
-```
+cd C:\Users\cwt02014.VSCC\VSCC-WebDiner
 
-或
-
-```cmd
-# 命令提示字元
-deploy-iis.bat
-```
-
-#### 方法 B: 手動建置
-
-```bash
 # 1. 建置前端
 cd frontend
 npm install
 npm run build
 
-# 2. 發布後端
-cd ../WebDiner.Api
-dotnet publish -c Release -o ../publish
+# 2. 發布後端 (獨立部署)
+cd ..\WebDiner.Api
+dotnet publish -c Release -o ..\publish-selfcontained --self-contained true -r win-x64
 
 # 3. 複製前端到 wwwroot
-xcopy /s /e /y ..\frontend\dist\* ..\publish\wwwroot\
+Copy-Item -Path "..\frontend\dist\*" -Destination "..\publish-selfcontained\wwwroot" -Recurse -Force
+
+# 4. 建立 logs 資料夾
+mkdir ..\publish-selfcontained\logs -ErrorAction SilentlyContinue
 ```
 
-### 步驟 3: 設定 IIS
+#### 方法 B：VS2022 發布
 
-1. **建立 Application Pool**
-   - 開啟 IIS Manager
-   - 右鍵「Application Pools」→「Add Application Pool」
-   - 名稱: `WebDiner`
-   - .NET CLR Version: **No Managed Code**
-   - Managed Pipeline Mode: Integrated
-   - Start application pool immediately: ✓
+1. 方案總管 → 右鍵 **WebDiner.Api** → **發佈...**
+2. 選擇 **資料夾**
+3. 設定選項：
+   - 組態：Release
+   - 目標框架：net8.0
+   - **部署模式：獨立式 (Self-Contained)**
+   - **目標執行階段：win-x64**
+4. 點選 **發佈**
+5. 手動複製前端：
+   ```powershell
+   Copy-Item -Path "frontend\dist\*" -Destination "publish\wwwroot" -Recurse -Force
+   ```
 
-2. **設定 Application Pool 身份識別**
-   - 選擇 `WebDiner` Pool → Advanced Settings
-   - Identity: 選擇有足夠權限存取資料庫的帳戶
-   - 或使用 `ApplicationPoolIdentity` 並在 SQL Server 授權
+### 步驟 2：複製到伺服器
 
-3. **建立網站**
-   - 右鍵「Sites」→「Add Website」
-   - Site name: `WebDiner`
-   - Application pool: `WebDiner`
-   - Physical path: `C:\inetpub\wwwroot\WebDiner` (或您的部署目錄)
-   - Binding: 
-     - Type: http
-     - Port: 80 (或其他)
-     - Host name: (選填)
+將發布資料夾的**全部內容**複製到伺服器：
+```
+C:\web\WebDiner\publish
+```
 
-4. **複製發布檔案**
-   - 將 `publish` 目錄的所有內容複製到網站物理路徑
+### 步驟 3：設定 IIS
 
-### 步驟 4: 設定應用程式
+#### 3.1 建立應用程式集區
 
-編輯 `appsettings.json`:
+1. 開啟 **IIS 管理員**
+2. 右鍵 **應用程式集區** → **新增應用程式集區**
+3. 設定：
+   - 名稱：`WebDiner`
+   - **.NET CLR 版本：無受控程式碼** ⚠️ 重要！
+   - 受控管線模式：整合式
+
+#### 3.2 建立網站
+
+1. 右鍵 **站台** → **新增網站**
+2. 設定：
+   - 站台名稱：`WebDiner`
+   - 應用程式集區：`WebDiner`
+   - **實體路徑：`C:\web\WebDiner\publish`**
+   - 繫結：
+     - 類型：http
+     - 連接埠：80
+     - 主機名稱：(選填)
+
+### 步驟 4：設定應用程式
+
+#### 4.1 編輯 web.config
+
+確認 `C:\web\WebDiner\publish\web.config` 內容：
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <location path="." inheritInChildApplications="false">
+    <system.webServer>
+      <handlers>
+        <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+      </handlers>
+      <aspNetCore processPath=".\WebDiner.Api.exe" 
+                  arguments="" 
+                  stdoutLogEnabled="true" 
+                  stdoutLogFile=".\logs\stdout" 
+                  hostingModel="InProcess">
+        <environmentVariables>
+          <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+        </environmentVariables>
+      </aspNetCore>
+    </system.webServer>
+  </location>
+</configuration>
+```
+
+> ⚠️ **重要**：獨立部署時 `arguments` 必須為空 `""`
+
+#### 4.2 編輯 appsettings.json
+
+編輯 `C:\web\WebDiner\publish\appsettings.json`：
 
 ```json
 {
@@ -129,7 +151,7 @@ xcopy /s /e /y ..\frontend\dist\* ..\publish\wwwroot\
     "DefaultConnection": "Server=YOUR_SERVER;Database=WebDiner;User Id=YOUR_USER;Password=YOUR_PASSWORD;TrustServerCertificate=True;"
   },
   "Jwt": {
-    "SecretKey": "YOUR_STRONG_SECRET_KEY_AT_LEAST_32_CHARACTERS",
+    "SecretKey": "YourSuperSecretKeyForWebDinerApp2024!AtLeast32Characters",
     "Issuer": "WebDiner.Api",
     "Audience": "WebDiner.Frontend",
     "ExpirationMinutes": 480
@@ -144,108 +166,161 @@ xcopy /s /e /y ..\frontend\dist\* ..\publish\wwwroot\
 }
 ```
 
-> ⚠️ **重要**: 
-> - 使用強密碼的 JWT SecretKey (至少 32 字元)
-> - 根據實際環境設定資料庫連線字串
-> - 生產環境建議將 LogLevel 設為 Warning
+> ⚠️ **重要**：
+> - `SecretKey` 必須至少 32 個字元！
+> - 修改資料庫連線字串為實際值
 
-### 步驟 5: 設定權限
-
-確保 Application Pool 身份有以下權限：
+### 步驟 5：設定權限
 
 ```powershell
-# 給予 IIS_IUSRS 讀取權限
-icacls "C:\inetpub\wwwroot\WebDiner" /grant "IIS_IUSRS:(OI)(CI)RX" /T
+# 給予 IIS 讀取權限
+icacls "C:\web\WebDiner\publish" /grant "IIS_IUSRS:(OI)(CI)RX" /T
 
-# 如果需要寫入 logs 目錄
-icacls "C:\inetpub\wwwroot\WebDiner\logs" /grant "IIS_IUSRS:(OI)(CI)F" /T
+# 給予 logs 資料夾寫入權限
+icacls "C:\web\WebDiner\publish\logs" /grant "IIS_IUSRS:(OI)(CI)F" /T
 ```
 
-### 步驟 6: 測試部署
+### 步驟 6：重啟 IIS
+
+```powershell
+iisreset
+```
+
+### 步驟 7：測試
 
 1. 開啟瀏覽器，訪問 `http://your-server/`
 2. 應該看到 WebDiner 登入頁面
-3. 測試 API: `http://your-server/api`
-4. 使用預設帳號登入測試
+3. 測試 API：`http://your-server/api`
 
-## 故障排除
+---
 
-### 500.19 錯誤
-- 確認已安裝 URL Rewrite Module
-- 檢查 web.config 語法
+## 🔧 NuGet 問題修復
 
-### 502.5 錯誤
-- 確認已安裝 .NET 8.0 Hosting Bundle
-- 檢查 Application Pool 是否為 "No Managed Code"
-- 查看 Windows 事件檢視器 → Application
+如果遇到 NuGet 無法下載套件的問題：
 
-### API 返回 500 錯誤
-- 檢查資料庫連線字串
-- 確認 SQL Server 允許該帳戶連線
-- 啟用 stdout 日誌：編輯 web.config，設定 `stdoutLogEnabled="true"`
+```powershell
+# 重新設定 NuGet 來源
+dotnet nuget remove source "nuget.org"
+dotnet nuget remove source "nuget.org1"
+dotnet nuget add source "https://api.nuget.org/v3/index.json" -n "nuget.org"
 
-### 前端頁面顯示空白
-- 確認 wwwroot 目錄包含前端檔案
-- 檢查瀏覽器 Console 是否有 JavaScript 錯誤
-- 確認檔案有正確的讀取權限
+# 清除快取
+dotnet nuget locals all --clear
 
-### 啟用 stdout 日誌
+# 重新還原
+dotnet restore
+```
 
-1. 建立 logs 目錄:
-   ```
-   mkdir C:\inetpub\wwwroot\WebDiner\logs
-   ```
+---
 
-2. 修改 web.config:
+## 📋 部署檢查清單
+
+| 項目 | 狀態 |
+|------|------|
+| 前端已建置 (`npm run build`) | ☐ |
+| 後端已發布 (`dotnet publish --self-contained`) | ☐ |
+| 前端檔案已複製到 wwwroot | ☐ |
+| appsettings.json 已設定（連線字串、JWT SecretKey） | ☐ |
+| web.config arguments 為空 | ☐ |
+| IIS 應用程式集區為「無受控程式碼」 | ☐ |
+| IIS 網站指向 publish 資料夾 | ☐ |
+| logs 資料夾已建立且有寫入權限 | ☐ |
+| 已執行 iisreset | ☐ |
+
+---
+
+## 🔍 故障排除
+
+### HTTP 404.17 錯誤
+- 安裝 .NET 8.0 Hosting Bundle
+- 執行 `iisreset`
+
+### HTTP 500.31 錯誤
+- 確認使用獨立部署 (`--self-contained true`)
+- 或在伺服器安裝對應版本的 .NET Runtime
+
+### HTTP 503 錯誤
+- 檢查 `web.config` 的 `arguments` 是否為空
+- 檢查 `appsettings.json` 的 `Jwt:SecretKey` 是否有值（至少32字元）
+- 檢查資料庫連線字串是否正確
+- 查看 `logs\stdout*.log` 日誌
+
+### 啟用詳細日誌
+
+1. 編輯 web.config：
    ```xml
-   <aspNetCore stdoutLogEnabled="true" ...>
+   stdoutLogEnabled="true"
    ```
 
-3. 給予寫入權限並重啟網站
+2. 建立 logs 資料夾並給予寫入權限：
+   ```powershell
+   mkdir C:\web\WebDiner\publish\logs
+   icacls "C:\web\WebDiner\publish\logs" /grant "IIS_IUSRS:(OI)(CI)F"
+   ```
 
-## HTTPS 配置 (建議)
+3. 重新整理網頁後檢查日誌：
+   ```powershell
+   Get-Content "C:\web\WebDiner\publish\logs\stdout*.log" -Tail 50
+   ```
 
-### 使用自簽憑證 (測試用)
-```powershell
-# 在 IIS Manager 中
-# 選擇伺服器 → Server Certificates → Create Self-Signed Certificate
-```
-
-### 綁定 HTTPS
-1. 在網站 Bindings 中新增 https (443)
-2. 選擇 SSL 憑證
-
-### 強制 HTTPS 重導向
-在 web.config 的 `<rewrite>` 區段加入:
-
-```xml
-<rule name="HTTPS Redirect" stopProcessing="true">
-  <match url="(.*)" />
-  <conditions>
-    <add input="{HTTPS}" pattern="off" ignoreCase="true" />
-  </conditions>
-  <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" redirectType="Permanent" />
-</rule>
-```
-
-## 更新部署
-
-1. 停止 Application Pool
-2. 重新執行 `deploy-iis.ps1`
-3. 複製新的發布檔案到網站目錄
-4. 啟動 Application Pool
+### 檢查 Windows 事件日誌
 
 ```powershell
-# 範例腳本
+Get-WinEvent -LogName Application -MaxEvents 30 | 
+  Where-Object { $_.Message -like "*WebDiner*" -or $_.ProviderName -like "*ASP.NET*" } | 
+  Format-List TimeCreated, Message
+```
+
+---
+
+## 🔄 更新部署
+
+```powershell
+# 1. 停止應用程式集區
 Stop-WebAppPool -Name "WebDiner"
-Copy-Item -Path ".\publish\*" -Destination "C:\inetpub\wwwroot\WebDiner" -Recurse -Force
+
+# 2. 複製新檔案
+Copy-Item -Path ".\publish-selfcontained\*" -Destination "C:\web\WebDiner\publish" -Recurse -Force
+
+# 3. 啟動應用程式集區
 Start-WebAppPool -Name "WebDiner"
 ```
 
-## 備份建議
+---
+
+## 📦 備份建議
 
 定期備份以下項目：
 - `appsettings.json` (包含設定)
 - SQL Server 資料庫
 - 上傳的檔案 (如果有)
 
+---
+
+## 🌐 HTTPS 配置 (建議)
+
+### 使用自簽憑證 (測試用)
+在 IIS Manager 中：伺服器 → Server Certificates → Create Self-Signed Certificate
+
+### 綁定 HTTPS
+1. 在網站 Bindings 中新增 https (443)
+2. 選擇 SSL 憑證
+
+### 強制 HTTPS 重導向
+在 web.config 的 `<system.webServer>` 區段加入：
+
+```xml
+<rewrite>
+  <rules>
+    <rule name="HTTPS Redirect" stopProcessing="true">
+      <match url="(.*)" />
+      <conditions>
+        <add input="{HTTPS}" pattern="off" ignoreCase="true" />
+      </conditions>
+      <action type="Redirect" url="https://{HTTP_HOST}/{R:1}" redirectType="Permanent" />
+    </rule>
+  </rules>
+</rewrite>
+```
+
+> 注意：需要安裝 URL Rewrite Module

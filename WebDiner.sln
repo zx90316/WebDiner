@@ -3,8 +3,113 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
+
+# .NET API 專案
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WebDiner.Api", "WebDiner.Api\WebDiner.Api.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
+
+# 前端解決方案資料夾 (Vue.js)
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "frontend", "frontend", "{B2C3D4E5-F6A7-8901-BCDE-F23456789012}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\package.json = frontend\package.json
+		frontend\vite.config.ts = frontend\vite.config.ts
+		frontend\tsconfig.json = frontend\tsconfig.json
+		frontend\index.html = frontend\index.html
+		frontend\README.md = frontend\README.md
+	EndProjectSection
+EndProject
+
+# 前端 src 資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C3D4E5F6-A7B8-9012-CDEF-345678901234}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\src\App.vue = frontend\src\App.vue
+		frontend\src\main.ts = frontend\src\main.ts
+		frontend\src\index.css = frontend\src\index.css
+		frontend\src\env.d.ts = frontend\src\env.d.ts
+	EndProjectSection
+EndProject
+
+# 前端 views 資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "views", "views", "{D4E5F6A7-B8C9-0123-DEF0-456789012345}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\src\views\HomeView.vue = frontend\src\views\HomeView.vue
+		frontend\src\views\LoginView.vue = frontend\src\views\LoginView.vue
+		frontend\src\views\MenuView.vue = frontend\src\views\MenuView.vue
+		frontend\src\views\OrderView.vue = frontend\src\views\OrderView.vue
+		frontend\src\views\OrderStatusView.vue = frontend\src\views\OrderStatusView.vue
+		frontend\src\views\DashboardView.vue = frontend\src\views\DashboardView.vue
+		frontend\src\views\NotFoundView.vue = frontend\src\views\NotFoundView.vue
+		frontend\src\views\AccessDeniedView.vue = frontend\src\views\AccessDeniedView.vue
+	EndProjectSection
+EndProject
+
+# 前端 components 資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "components", "components", "{E5F6A7B8-C9D0-1234-EF01-567890123456}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\src\components\Navbar.vue = frontend\src\components\Navbar.vue
+		frontend\src\components\Loading.vue = frontend\src\components\Loading.vue
+		frontend\src\components\LoadingButton.vue = frontend\src\components\LoadingButton.vue
+		frontend\src\components\TimeDisplay.vue = frontend\src\components\TimeDisplay.vue
+		frontend\src\components\ToastContainer.vue = frontend\src\components\ToastContainer.vue
+	EndProjectSection
+EndProject
+
+# 前端 admin components 資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "admin", "admin", "{F6A7B8C9-D0E1-2345-F012-678901234567}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\src\components\admin\AdminOrderPanel.vue = frontend\src\components\admin\AdminOrderPanel.vue
+		frontend\src\components\admin\AdminUserPanel.vue = frontend\src\components\admin\AdminUserPanel.vue
+		frontend\src\components\admin\AdminVendorPanel.vue = frontend\src\components\admin\AdminVendorPanel.vue
+		frontend\src\components\admin\AdminMenuPanel.vue = frontend\src\components\admin\AdminMenuPanel.vue
+		frontend\src\components\admin\AdminSpecialDayPanel.vue = frontend\src\components\admin\AdminSpecialDayPanel.vue
+		frontend\src\components\admin\AdminDivisionPanel.vue = frontend\src\components\admin\AdminDivisionPanel.vue
+		frontend\src\components\admin\AdminDepartmentPanel.vue = frontend\src\components\admin\AdminDepartmentPanel.vue
+		frontend\src\components\admin\AdminExtensionDirectoryPanel.vue = frontend\src\components\admin\AdminExtensionDirectoryPanel.vue
+		frontend\src\components\admin\VendorOrderStatusPanel.vue = frontend\src\components\admin\VendorOrderStatusPanel.vue
+		frontend\src\components\admin\AdminDayMenuPanel.vue = frontend\src\components\admin\AdminDayMenuPanel.vue
+	EndProjectSection
+EndProject
+
+# 前端 stores 資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "stores", "stores", "{A7B8C9D0-E1F2-3456-0123-789012345678}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\src\stores\auth.ts = frontend\src\stores\auth.ts
+		frontend\src\stores\menu.ts = frontend\src\stores\menu.ts
+		frontend\src\stores\order.ts = frontend\src\stores\order.ts
+		frontend\src\stores\toast.ts = frontend\src\stores\toast.ts
+	EndProjectSection
+EndProject
+
+# 前端 router 資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "router", "router", "{B8C9D0E1-F2A3-4567-1234-890123456789}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\src\router\index.ts = frontend\src\router\index.ts
+	EndProjectSection
+EndProject
+
+# 前端 composables 資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "composables", "composables", "{C9D0E1F2-A3B4-5678-2345-901234567890}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\src\composables\useApi.ts = frontend\src\composables\useApi.ts
+		frontend\src\composables\useTime.ts = frontend\src\composables\useTime.ts
+	EndProjectSection
+EndProject
+
+# 前端 lib 資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "lib", "lib", "{D0E1F2A3-B4C5-6789-3456-012345678901}"
+	ProjectSection(SolutionItems) = preProject
+		frontend\src\lib\api.ts = frontend\src\lib\api.ts
+		frontend\src\lib\utils.ts = frontend\src\lib\utils.ts
+	EndProjectSection
+EndProject
+
+# 資料庫資料夾
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Database", "Database", "{E1F2A3B4-C5D6-7890-4567-123456789012}"
+	ProjectSection(SolutionItems) = preProject
+		Database\webdiner.db.sql = Database\webdiner.db.sql
+	EndProjectSection
+EndProject
+
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -16,5 +121,17 @@ Global
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C3D4E5F6-A7B8-9012-CDEF-345678901234} = {B2C3D4E5-F6A7-8901-BCDE-F23456789012}
+		{D4E5F6A7-B8C9-0123-DEF0-456789012345} = {C3D4E5F6-A7B8-9012-CDEF-345678901234}
+		{E5F6A7B8-C9D0-1234-EF01-567890123456} = {C3D4E5F6-A7B8-9012-CDEF-345678901234}
+		{F6A7B8C9-D0E1-2345-F012-678901234567} = {E5F6A7B8-C9D0-1234-EF01-567890123456}
+		{A7B8C9D0-E1F2-3456-0123-789012345678} = {C3D4E5F6-A7B8-9012-CDEF-345678901234}
+		{B8C9D0E1-F2A3-4567-1234-890123456789} = {C3D4E5F6-A7B8-9012-CDEF-345678901234}
+		{C9D0E1F2-A3B4-5678-2345-901234567890} = {C3D4E5F6-A7B8-9012-CDEF-345678901234}
+		{D0E1F2A3-B4C5-6789-3456-012345678901} = {C3D4E5F6-A7B8-9012-CDEF-345678901234}
+	EndGlobalSection
 EndGlobal
-
