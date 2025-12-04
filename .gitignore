@@ -31,3 +31,8 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+# 敏感配置檔案（使用 .template 作為範本）
+WebDiner.Api/appsettings.json
+WebDiner.Api/appsettings.Development.json
+WebDiner.Api/appsettings.*.json
+!WebDiner.Api/appsettings.json.template

@@ -161,10 +161,7 @@ using (var scope = app.Services.CreateScope())
     var dbContext = services.GetRequiredService<WebDinerDbContext>();
     var passwordService = services.GetRequiredService<IPasswordService>();
     
-    dbContext.Database.EnsureCreated();
-    
-    // Seed initial data
-    WebDiner.Api.Data.DbInitializer.Initialize(dbContext, passwordService);
+    DbInitializer.Initialize(dbContext, passwordService);
 }
 
 app.Run();
