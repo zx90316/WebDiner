@@ -36,3 +36,4 @@ WebDiner.Api/appsettings.json
 WebDiner.Api/appsettings.Development.json
 WebDiner.Api/appsettings.*.json
 !WebDiner.Api/appsettings.json.template
+publish/
