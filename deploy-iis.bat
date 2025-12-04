@@ -14,6 +14,9 @@ set API_DIR=WebDiner.Api
 :: 設定 Node.js 跳過平台檢查 (Windows Server 2012 等舊版系統需要)
 set NODE_SKIP_PLATFORM_CHECK=1
 
+:: 設定 CI 模式，減少控制台輸出 (避免 EIO 錯誤)
+set CI=true
+
 :: 1. 清理舊的發布目錄
 echo [1/4] 清理舊的發布目錄...
 if exist %PUBLISH_DIR% rmdir /s /q %PUBLISH_DIR%
@@ -21,10 +24,11 @@ mkdir %PUBLISH_DIR%
 
 :: 2. 建置前端
 echo.
-echo [2/4] 建置前端 (npm run build)...
+echo [2/4] 建置前端...
 cd %FRONTEND_DIR%
-call npm install
-call npm run build
+call npm install --silent
+echo 正在執行 vite build...
+call npx vite build --logLevel error
 if errorlevel 1 (
     echo 前端建置失敗！
     pause
