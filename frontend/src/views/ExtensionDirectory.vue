@@ -260,17 +260,23 @@ const handlePrint = () => {
                 .columns-container {
                     display: grid;
                     grid-template-columns: repeat(4, 1fr);
+                    gap: 0;
                 }
                 .column-section {
                     display: flex;
                     flex-direction: column;
+                    gap: 0;
+                }
+                .column-section:not(:first-child) .division-section {
+                    margin-left: -2px;
+                }
+                .division-section:not(:first-child) {
+                    margin-top: -3px;
                 }
                 .division-section {
                     border: 2px solid black;
-                    border-radius: 3px;
                     overflow: hidden;
                     page-break-inside: avoid;
-                    margin: -1px;
                 }
                 .division-header {
                     background: rgb(192, 192, 192);
