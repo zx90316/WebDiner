@@ -114,6 +114,11 @@ const highlightText = (text: string | null) => {
     return text.replace(regex, '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>')
 }
 
+// 將文字中的英文部分和符號"・"用 span 包起來，設定字體大小為 5px
+const wrapEnglishWithSmallFont = (text: string) => {
+    return text.replace(/([A-Za-z0-9・]+)/g, '<span style="font-size: 6px;">$1</span>')
+}
+
 const handlePrint = () => {
     if (!data.value) {
         toastStore.showToast('無資料可列印', 'error')
@@ -144,7 +149,7 @@ const handlePrint = () => {
                         ? user.title.split('').join(' ') 
                         : ''
                     const hasTitle = titleDisplay !== ''
-                    const nameDisplay = user.name
+                    const nameDisplay = wrapEnglishWithSmallFont(user.name)
                     const secondaryBadge = user.is_secondary_department ? '<span class="secondary-badge">兼任</span>' : ''
                     const extensionDisplay = user.extension || '--'
                     
@@ -247,7 +252,7 @@ const handlePrint = () => {
                     margin: 0;
                 }
                 .print-header .date {
-                    font-size: 11px;
+                    font-size: 13px;
                     color: #555;
                     position: absolute;
                     right: 0;
@@ -255,24 +260,23 @@ const handlePrint = () => {
                 .columns-container {
                     display: grid;
                     grid-template-columns: repeat(4, 1fr);
-                    gap: 6px;
                 }
                 .column-section {
                     display: flex;
                     flex-direction: column;
-                    gap: 4px;
                 }
                 .division-section {
                     border: 2px solid black;
                     border-radius: 3px;
                     overflow: hidden;
                     page-break-inside: avoid;
+                    margin: -1px;
                 }
                 .division-header {
                     background: rgb(192, 192, 192);
                     color: black;
                     font-weight: bold;
-                    font-size: 11px;
+                    font-size: 13px;
                     text-align: center;
                 }
                 .departments-container {
@@ -293,7 +297,7 @@ const handlePrint = () => {
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    font-size: 11px;
+                    font-size: 13px;
                     font-weight: 600;
                     border-bottom: 1px solid black;
                 }
@@ -313,7 +317,7 @@ const handlePrint = () => {
                 .user-row {
                     display: flex;
                     align-items: center;
-                    font-size: 11px;
+                    font-size: 13px;
                 }
                 .user-row:last-child {
                     border-bottom: none;
@@ -330,7 +334,6 @@ const handlePrint = () => {
                     min-width: 4px;
                 }
                 .user-name {
-                    color: #1f2937;
                     white-space: nowrap;
                 }
                 .user-extension {
