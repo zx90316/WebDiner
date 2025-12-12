@@ -18,6 +18,7 @@ interface User {
     is_active: boolean
     title: string | null
     is_department_head: boolean
+    secondary_department_ids: number[] | null
 }
 
 interface Department {
@@ -46,6 +47,7 @@ const formData = reactive({
     role: 'user',
     title: '',
     is_department_head: false,
+    secondary_department_ids: [] as number[],
 })
 
 const loadData = async () => {
@@ -81,6 +83,7 @@ const handleSubmit = async () => {
             role: formData.role,
             title: formData.title || null,
             is_department_head: formData.is_department_head,
+            secondary_department_ids: formData.secondary_department_ids.length > 0 ? formData.secondary_department_ids : null,
         }
 
         if (formData.password) {
@@ -124,6 +127,7 @@ const handleEdit = (user: User) => {
     formData.role = user.role || 'user'
     formData.title = user.title || ''
     formData.is_department_head = user.is_department_head || false
+    formData.secondary_department_ids = user.secondary_department_ids || []
     editingId.value = user.id
 }
 
@@ -156,7 +160,32 @@ const resetForm = () => {
     formData.role = 'user'
     formData.title = ''
     formData.is_department_head = false
+    formData.secondary_department_ids = []
     editingId.value = null
+}
+
+const toggleSecondaryDepartment = (deptId: number) => {
+    const index = formData.secondary_department_ids.indexOf(deptId)
+    if (index > -1) {
+        formData.secondary_department_ids.splice(index, 1)
+    } else {
+        // 確保不是主部門
+        if (formData.department_id && Number(formData.department_id) === deptId) {
+            toastStore.showToast('不能將主部門設為兼任部門', 'error')
+            return
+        }
+        formData.secondary_department_ids.push(deptId)
+    }
+}
+
+const isSecondaryDepartmentSelected = (deptId: number) => {
+    return formData.secondary_department_ids.includes(deptId)
+}
+
+const getAvailableDepartments = () => {
+    // 排除主部門
+    const mainDeptId = formData.department_id ? Number(formData.department_id) : null
+    return departments.value.filter(dept => dept.id !== mainDeptId)
 }
 
 onMounted(() => {
@@ -195,14 +224,44 @@ onMounted(() => {
                     />
                 </div>
                 <div>
-                    <label class="block text-gray-700 mb-2 font-medium">部門</label>
+                    <label class="block text-gray-700 mb-2 font-medium">主部門</label>
                     <select
                         v-model="formData.department_id"
                         class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
+                        @change="formData.secondary_department_ids = formData.secondary_department_ids.filter(id => id !== Number(formData.department_id))"
                     >
                         <option value="">請選擇部門</option>
                         <option v-for="dept in departments" :key="dept.id" :value="dept.id">{{ dept.name }}</option>
                     </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-gray-700 mb-2 font-medium">兼任部門</label>
+                    <div class="border rounded p-3 bg-gray-50 max-h-40 overflow-y-auto">
+                        <div v-if="getAvailableDepartments().length === 0" class="text-gray-500 text-sm">
+                            請先選擇主部門
+                        </div>
+                        <div v-else class="flex flex-wrap gap-2">
+                            <label
+                                v-for="dept in getAvailableDepartments()"
+                                :key="dept.id"
+                                class="flex items-center cursor-pointer px-3 py-1.5 rounded border transition"
+                                :class="isSecondaryDepartmentSelected(dept.id)
+                                    ? 'bg-blue-100 border-blue-400 text-blue-800'
+                                    : 'bg-white border-gray-300 hover:bg-gray-50'"
+                            >
+                                <input
+                                    type="checkbox"
+                                    :checked="isSecondaryDepartmentSelected(dept.id)"
+                                    @change="toggleSecondaryDepartment(dept.id)"
+                                    class="mr-2 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span class="text-sm">{{ dept.name }}</span>
+                            </label>
+                        </div>
+                        <div v-if="formData.secondary_department_ids.length > 0" class="mt-2 text-xs text-gray-600">
+                            已選擇 {{ formData.secondary_department_ids.length }} 個兼任部門
+                        </div>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-gray-700 mb-2 font-medium">分機</label>
@@ -297,7 +356,18 @@ onMounted(() => {
                         <td class="p-3 font-medium">{{ user.employee_id }}</td>
                         <td class="p-3">{{ user.name }}</td>
                         <td class="p-3">{{ user.title || '-' }}</td>
-                        <td class="p-3">{{ departments.find(d => d.id === user.department_id)?.name || '-' }}</td>
+                        <td class="p-3">
+                            <div>
+                                <div>{{ departments.find(d => d.id === user.department_id)?.name || '-' }}</div>
+                                <div v-if="user.secondary_department_ids && user.secondary_department_ids.length > 0" class="text-xs text-blue-600 mt-1">
+                                    <span class="font-medium">兼任：</span>
+                                    <span v-for="(deptId, idx) in user.secondary_department_ids" :key="deptId">
+                                        {{ departments.find(d => d.id === deptId)?.name }}
+                                        <span v-if="idx < user.secondary_department_ids.length - 1">、</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </td>
                         <td class="p-3">{{ user.extension || '-' }}</td>
                         <td class="p-3 text-center">
                             <span v-if="user.role === 'sysadmin'" class="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full">系統管理員</span>

@@ -38,17 +38,32 @@ public class ExtensionDirectoryController : ControllerBase
         return await _context.Users.FirstOrDefaultAsync(u => u.EmployeeId == employeeId);
     }
 
-    private async Task<List<ExtensionDirectoryUserDto>> GetSortedUsersAsync(int departmentId)
+    private async Task<List<ExtensionDirectoryUserDto>> GetSortedUsersAsync(int departmentId, bool isSecondary = false)
     {
-        var users = await _context.Users
-            .Where(u => u.DepartmentId == departmentId && u.IsActive)
-            .ToListAsync();
+        List<User> users;
+        
+        if (isSecondary)
+        {
+            // 兼任部門的用戶
+            users = await _context.UserDepartments
+                .Where(ud => ud.DepartmentId == departmentId)
+                .Select(ud => ud.User)
+                .Where(u => u.IsActive)
+                .ToListAsync();
+        }
+        else
+        {
+            // 主部門的用戶
+            users = await _context.Users
+                .Where(u => u.DepartmentId == departmentId && u.IsActive)
+                .ToListAsync();
+        }
 
         return users
             .OrderBy(u => !u.IsDepartmentHead)
             .ThenBy(u => u.EmployeeId)
             .Select(u => new ExtensionDirectoryUserDto(
-                u.EmployeeId, u.Name, u.Extension, u.Title, u.IsDepartmentHead
+                u.EmployeeId, u.Name, u.Extension, u.Title, u.IsDepartmentHead, isSecondary
             ))
             .ToList();
     }
@@ -88,13 +103,30 @@ public class ExtensionDirectoryController : ControllerBase
                 columnsDict[colIndex][divId] = new List<ExtensionDirectoryDepartmentDto>();
             }
 
+            // 獲取主部門的用戶
+            var mainUsers = await GetSortedUsersAsync(dept.Id, false);
+            
+            // 獲取兼任此部門的用戶
+            var secondaryUsers = await GetSortedUsersAsync(dept.Id, true);
+            
+            // 獲取主部門用戶的 ID 集合，避免重複
+            var mainUserIds = mainUsers.Select(u => u.EmployeeId).ToHashSet();
+            
+            // 過濾掉已經在主部門中的兼任用戶（避免重複）
+            var filteredSecondaryUsers = secondaryUsers
+                .Where(u => !mainUserIds.Contains(u.EmployeeId))
+                .ToList();
+            
+            // 合併用戶列表（兼任用戶在前，因為只有主管才會兼任）
+            var allUsers = filteredSecondaryUsers.Concat(mainUsers).ToList();
+
             var deptData = new ExtensionDirectoryDepartmentDto(
                 dept.Id,
                 dept.Name,
                 divId == 0 ? null : divId,
                 divId != 0 && divisionMap.ContainsKey(divId) ? divisionMap[divId].Name : null,
                 dept.DisplayOrder,
-                await GetSortedUsersAsync(dept.Id)
+                allUsers
             );
 
             columnsDict[colIndex][divId].Add(deptData);

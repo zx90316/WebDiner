@@ -149,7 +149,11 @@ public class AdminController : ControllerBase
         var adminCheck = await RequireAdminAsync();
         if (adminCheck != null) return adminCheck;
 
-        var users = await _context.Users.Skip(skip).Take(limit).ToListAsync();
+        var users = await _context.Users
+            .Include(u => u.UserDepartments)
+            .Skip(skip)
+            .Take(limit)
+            .ToListAsync();
         return Ok(users.Select(MapUserToDto));
     }
 
@@ -190,6 +194,31 @@ public class AdminController : ControllerBase
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
+        // 處理兼任部門
+        if (dto.SecondaryDepartmentIds != null && dto.SecondaryDepartmentIds.Any())
+        {
+            foreach (var deptId in dto.SecondaryDepartmentIds)
+            {
+                // 確保不是主部門
+                if (deptId != dto.DepartmentId)
+                {
+                    var dept = await _context.Departments.FindAsync(deptId);
+                    if (dept != null && dept.IsActive)
+                    {
+                        var userDept = new UserDepartment
+                        {
+                            UserId = user.Id,
+                            DepartmentId = deptId
+                        };
+                        _context.UserDepartments.Add(userDept);
+                    }
+                }
+            }
+            await _context.SaveChangesAsync();
+        }
+
+        // 重新載入以包含兼任部門
+        await _context.Entry(user).Collection(u => u.UserDepartments).LoadAsync();
         return Ok(MapUserToDto(user));
     }
 
@@ -239,8 +268,44 @@ public class AdminController : ControllerBase
         if (dto.IsDepartmentHead.HasValue) user.IsDepartmentHead = dto.IsDepartmentHead.Value;
         if (dto.Password != null) user.HashedPassword = _passwordService.HashPassword(dto.Password);
 
+        // 處理兼任部門更新
+        if (dto.SecondaryDepartmentIds != null)
+        {
+            // 載入現有的兼任部門
+            await _context.Entry(user).Collection(u => u.UserDepartments).LoadAsync();
+            
+            // 移除所有現有的兼任部門
+            var existingUserDepts = user.UserDepartments.ToList();
+            foreach (var userDept in existingUserDepts)
+            {
+                _context.UserDepartments.Remove(userDept);
+            }
+            
+            // 添加新的兼任部門
+            foreach (var deptId in dto.SecondaryDepartmentIds)
+            {
+                // 確保不是主部門
+                var mainDeptId = dto.DepartmentId ?? user.DepartmentId;
+                if (deptId != mainDeptId)
+                {
+                    var dept = await _context.Departments.FindAsync(deptId);
+                    if (dept != null && dept.IsActive)
+                    {
+                        var userDept = new UserDepartment
+                        {
+                            UserId = user.Id,
+                            DepartmentId = deptId
+                        };
+                        _context.UserDepartments.Add(userDept);
+                    }
+                }
+            }
+        }
+
         await _context.SaveChangesAsync();
 
+        // 重新載入以包含兼任部門
+        await _context.Entry(user).Collection(u => u.UserDepartments).LoadAsync();
         return Ok(MapUserToDto(user));
     }
 
@@ -717,10 +782,18 @@ public class AdminController : ControllerBase
         return Ok(new OrderAnnouncementDto(targetDate, result));
     }
 
-    private static UserDto MapUserToDto(User user) => new(
-        user.Id, user.EmployeeId, user.Name, user.Extension, user.Email,
-        user.IsActive, user.IsAdmin, user.Role, user.DepartmentId,
-        user.Title, user.IsDepartmentHead
-    );
+    private static UserDto MapUserToDto(User user)
+    {
+        var secondaryDeptIds = user.UserDepartments?
+            .Select(ud => ud.DepartmentId)
+            .ToList() ?? new List<int>();
+            
+        return new UserDto(
+            user.Id, user.EmployeeId, user.Name, user.Extension, user.Email,
+            user.IsActive, user.IsAdmin, user.Role, user.DepartmentId,
+            user.Title, user.IsDepartmentHead,
+            secondaryDeptIds.Any() ? secondaryDeptIds : null
+        );
+    }
 }
 

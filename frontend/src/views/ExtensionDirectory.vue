@@ -11,6 +11,7 @@ interface ExtensionUser {
     extension: string | null
     title: string | null
     is_department_head: boolean
+    is_secondary_department: boolean
 }
 
 interface ExtensionDepartment {
@@ -177,6 +178,9 @@ onMounted(() => {
                                                 <span class="font-medium text-gray-800">
                                                     <span v-if="user.title && user.is_department_head" class="text-gray-500 text-sm mr-1" v-html="highlightText(user.title)" />
                                                     <span v-html="highlightText(user.name)" />
+                                                    <span v-if="user.is_secondary_department" class="ml-2 text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-medium">
+                                                        兼任
+                                                    </span>
                                                 </span>
                                             </div>
                                         </div>

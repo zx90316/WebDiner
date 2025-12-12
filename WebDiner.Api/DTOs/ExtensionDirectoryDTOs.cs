@@ -34,7 +34,8 @@ public record ExtensionDirectoryUserDto(
     string Name,
     string? Extension,
     string? Title,
-    bool IsDepartmentHead
+    bool IsDepartmentHead,
+    bool IsSecondaryDepartment = false
 );
 
 // ===== Position Update DTOs =====

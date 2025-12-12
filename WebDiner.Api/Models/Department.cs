@@ -31,5 +31,8 @@ public class Department
     
     // Navigation property
     public virtual ICollection<User> Users { get; set; } = new List<User>();
+    
+    // 兼任此部門的用戶（多對多關係）
+    public virtual ICollection<UserDepartment> UserDepartments { get; set; } = new List<UserDepartment>();
 }
 

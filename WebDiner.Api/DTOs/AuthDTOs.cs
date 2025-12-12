@@ -15,7 +15,8 @@ public record UserDto(
     string? Role,
     int? DepartmentId,
     string? Title,
-    bool IsDepartmentHead
+    bool IsDepartmentHead,
+    List<int>? SecondaryDepartmentIds = null
 );
 
 public record UserCreateDto(
@@ -27,7 +28,8 @@ public record UserCreateDto(
     int? DepartmentId = null,
     string Role = "user",
     string? Title = null,
-    bool IsDepartmentHead = false
+    bool IsDepartmentHead = false,
+    List<int>? SecondaryDepartmentIds = null
 );
 
 public record UserUpdateDto(
@@ -41,7 +43,8 @@ public record UserUpdateDto(
     bool? IsAdmin = null,
     string? Role = null,
     string? Title = null,
-    bool? IsDepartmentHead = null
+    bool? IsDepartmentHead = null,
+    List<int>? SecondaryDepartmentIds = null
 );
 
 public record UserLoginDto(

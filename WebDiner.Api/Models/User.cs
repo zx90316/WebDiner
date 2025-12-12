@@ -44,6 +44,9 @@ public class User
     
     public bool IsDepartmentHead { get; set; } = false; // 是否為部門主管
     
+    // 兼任部門（多對多關係）
+    public virtual ICollection<UserDepartment> UserDepartments { get; set; } = new List<UserDepartment>();
+    
     // Navigation property
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
 }
