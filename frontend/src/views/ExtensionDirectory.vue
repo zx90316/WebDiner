@@ -336,7 +336,6 @@ const handlePrint = () => {
                 .user-extension {
                     font-family: "Courier New", monospace;
                     font-weight: 600;
-                    color: #2563eb;
                     white-space: nowrap;
                     margin-left: 4px;
                     border-left: 1px solid black;
