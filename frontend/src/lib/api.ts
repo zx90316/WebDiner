@@ -80,7 +80,9 @@ export const api = {
 async function handleResponse(response: Response) {
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: "Unknown error" }));
-        throw new Error(error.detail || "Request failed");
+        const errorObj = new Error(error.detail || "Request failed");
+        (errorObj as any).detail = error.detail;
+        throw errorObj;
     }
     return response.json();
 }

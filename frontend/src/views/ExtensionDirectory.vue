@@ -14,13 +14,22 @@ interface ExtensionUser {
     is_secondary_department: boolean
 }
 
+interface ExtensionItem {
+    id: number
+    name: string
+    extension: string | null
+    item_type: string // "room" or "text"
+}
+
 interface ExtensionDepartment {
     id: number
     name: string
     division_id: number | null
     division_name: string | null
     display_order: number
+    show_name_in_directory: boolean
     users: ExtensionUser[]
+    items: ExtensionItem[]
 }
 
 interface ExtensionDivision {
@@ -82,8 +91,17 @@ const filteredData = computed<ExtensionDirectoryData | null>(() => {
                                     u.employee_id.toLowerCase().includes(term) ||
                                     u.title?.toLowerCase().includes(term)
                             ),
+                            items: dept.items.filter(
+                                (i) =>
+                                    i.name.toLowerCase().includes(term) ||
+                                    i.extension?.includes(term)
+                            ),
                         }))
-                        .filter((dept) => dept.users.length > 0 || dept.name.toLowerCase().includes(term)),
+                        .filter((dept) => 
+                            dept.users.length > 0 || 
+                            dept.items.length > 0 || 
+                            dept.name.toLowerCase().includes(term)
+                        ),
                 }))
                 .filter((div) => div.departments.length > 0 || div.name.toLowerCase().includes(term)),
         })),
@@ -125,28 +143,48 @@ const handlePrint = () => {
                     const titleDisplay = user.title && user.is_department_head 
                         ? user.title.split('').join(' ') 
                         : ''
+                    const hasTitle = titleDisplay !== ''
                     const nameDisplay = user.name
                     const secondaryBadge = user.is_secondary_department ? '<span class="secondary-badge">兼任</span>' : ''
                     const extensionDisplay = user.extension || '--'
                     
                     return `
                         <div class="user-row">
-                            <span class="user-title">${titleDisplay}</span>
+                            <span class="user-title"${hasTitle ? ' style="width: 35%;"' : ''}>${titleDisplay}</span>
                             <span class="user-spacer"></span>
                             <span class="user-name">${nameDisplay}${secondaryBadge}</span>
                             <span class="user-extension">${extensionDisplay}</span>
                         </div>
                     `
                 }).join('')
+                
+                const itemsHtml = (dept.items || []).map(item => {
+                    const nameDisplay = item.name || '　'
+                    const extensionDisplay = item.item_type === 'room' ? (item.extension || '　') : null
+                    
+                    return `
+                        <div class="user-row">
+                            <span class="user-title"></span>
+                            <span class="user-spacer"></span>
+                            <span class="user-name">${nameDisplay}</span>
+                            ${extensionDisplay !== null ? `<span class="user-extension">${extensionDisplay}</span>` : ''}
+                        </div>
+                    `
+                }).join('')
 
-                return `
-                    <div class="department-section">
-                        <div class="department-header">
+                const departmentHeader = dept.show_name_in_directory 
+                    ? `<div class="department-header">
                             <span class="department-name">${dept.name}</span>
                             <span class="department-count">${dept.users.length}人</span>
-                        </div>
+                        </div>`
+                    : ''
+                
+                return `
+                    <div class="department-section">
+                        ${departmentHeader}
                         <div class="users-list">
                             ${usersHtml}
+                            ${itemsHtml}
                         </div>
                     </div>
                 `
@@ -195,19 +233,24 @@ const handlePrint = () => {
                     padding: 0;
                 }
                 .print-header {
-                    text-align: center;
                     margin-bottom: 8px;
                     padding-bottom: 6px;
                     border-bottom: 2px solid #333;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    position: relative;
                 }
                 .print-header h1 {
                     font-size: 18px;
                     font-weight: bold;
-                    margin-bottom: 4px;
+                    margin: 0;
                 }
                 .print-header .date {
                     font-size: 11px;
                     color: #555;
+                    position: absolute;
+                    right: 0;
                 }
                 .columns-container {
                     display: grid;
@@ -229,8 +272,7 @@ const handlePrint = () => {
                     background: rgb(192, 192, 192);
                     color: black;
                     font-weight: bold;
-                    font-size: 14px;
-                    padding: 4px 6px;
+                    font-size: 11px;
                     text-align: center;
                 }
                 .departments-container {
@@ -248,11 +290,10 @@ const handlePrint = () => {
                 }
                 .department-header {
                     background: rgb(192, 192, 192);
-                    padding: 3px 6px;
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
-                    font-size: 14px;
+                    font-size: 11px;
                     font-weight: 600;
                     border-bottom: 1px solid black;
                 }
@@ -272,9 +313,7 @@ const handlePrint = () => {
                 .user-row {
                     display: flex;
                     align-items: center;
-                    padding: 2px 6px;
-                    border-bottom: 1px solid #f0f0f0;
-                    font-size: 14px;
+                    font-size: 11px;
                 }
                 .user-row:last-child {
                     border-bottom: none;
@@ -283,7 +322,6 @@ const handlePrint = () => {
                     color: #1f2937;
                     text-align: justify;
                     text-align-last: justify;
-                    width: 35%;
                     flex-shrink: 0;
                     margin-left: 10%;
                 }
@@ -301,6 +339,9 @@ const handlePrint = () => {
                     color: #2563eb;
                     white-space: nowrap;
                     margin-left: 4px;
+                    border-left: 1px solid black;
+                    min-width: 17%;
+                    text-align: center;
                 }
                 .secondary-badge {
                     display: none;
@@ -334,7 +375,7 @@ const handlePrint = () => {
         <body>
             <div class="print-header">
                 <h1>財團法人車輛安全審驗中心分機表</h1>
-                <div class="date">更新時間：${formattedDateStr}</div>
+                <span class="date">更新時間：${formattedDateStr}</span>
             </div>
             <div class="columns-container">
                 ${columnsHtml}
@@ -446,7 +487,7 @@ onMounted(() => {
                         <!-- 部門列表 -->
                         <div class="divide-y">
                             <div v-for="dept in division.departments" :key="dept.id">
-                                <div class="w-full px-4 bg-gray-50 flex items-center justify-between">
+                                <div v-if="dept.show_name_in_directory" class="w-full px-4 bg-gray-50 flex items-center justify-between">
                                     <span class="font-medium text-gray-700">{{ dept.name }}</span>
                                     <span class="text-gray-400 text-sm">{{ dept.users.length }}人</span>
                                 </div>
@@ -473,7 +514,30 @@ onMounted(() => {
                                                 class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 rounded group-hover:bg-blue-100 transition"
                                                 v-html="highlightText(user.extension)"
                                             />
-                                            <span v-else class="text-gray-400 text-sm">--</span>
+                                            <span v-else class="text-gray-400 text-sm">　</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 部門項目列表 -->
+                                    <div
+                                        v-for="item in dept.items"
+                                        :key="item.id"
+                                        class="px-4 hover:bg-blue-50 flex items-center justify-between transition group/item"
+                                    >
+                                        <div class="flex items-center gap-3">
+                                            <div>
+                                                <span class="font-medium text-gray-800">
+                                                    <span v-html="highlightText(item.name)" />
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="text-right">
+                                            <span
+                                                v-if="item.extension"
+                                                class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 rounded group-hover/item:bg-blue-100 transition"
+                                                v-html="highlightText(item.extension)"
+                                            />
+                                            <span v-else class="text-gray-400 text-sm">　</span>
                                         </div>
                                     </div>
                                 </div>

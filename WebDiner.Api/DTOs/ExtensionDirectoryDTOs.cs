@@ -26,7 +26,16 @@ public record ExtensionDirectoryDepartmentDto(
     int? DivisionId,
     string? DivisionName,
     int DisplayOrder,
-    List<ExtensionDirectoryUserDto> Users
+    bool ShowNameInDirectory,
+    List<ExtensionDirectoryUserDto> Users,
+    List<ExtensionDirectoryItemDto> Items
+);
+
+public record ExtensionDirectoryItemDto(
+    int Id,
+    string Name,
+    string? Extension,
+    string ItemType // "room" or "text"
 );
 
 public record ExtensionDirectoryUserDto(

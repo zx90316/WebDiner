@@ -372,7 +372,7 @@ public class AdminController : ControllerBase
 
         return Ok(new DivisionWithDepartmentsDto(
             division.Id, division.Name, division.IsActive, division.DisplayColumn, division.DisplayOrder,
-            departments.Select(d => new DepartmentDto(d.Id, d.Name, d.IsActive, d.DivisionId, d.DisplayColumn, d.DisplayOrder)).ToList()
+            departments.Select(d => new DepartmentDto(d.Id, d.Name, d.IsActive, d.DivisionId, d.DisplayColumn, d.DisplayOrder, d.ShowNameInDirectory)).ToList()
         ));
     }
 
@@ -465,7 +465,7 @@ public class AdminController : ControllerBase
         if (adminCheck != null) return adminCheck;
 
         var departments = await _context.Departments.Where(d => d.IsActive).ToListAsync();
-        return Ok(departments.Select(d => new DepartmentDto(d.Id, d.Name, d.IsActive, d.DivisionId, d.DisplayColumn, d.DisplayOrder)));
+        return Ok(departments.Select(d => new DepartmentDto(d.Id, d.Name, d.IsActive, d.DivisionId, d.DisplayColumn, d.DisplayOrder, d.ShowNameInDirectory)));
     }
 
     [HttpGet("departments/by-division/{divisionId}")]
@@ -479,7 +479,7 @@ public class AdminController : ControllerBase
             .OrderBy(d => d.DisplayOrder)
             .ToListAsync();
 
-        return Ok(departments.Select(d => new DepartmentDto(d.Id, d.Name, d.IsActive, d.DivisionId, d.DisplayColumn, d.DisplayOrder)));
+        return Ok(departments.Select(d => new DepartmentDto(d.Id, d.Name, d.IsActive, d.DivisionId, d.DisplayColumn, d.DisplayOrder, d.ShowNameInDirectory)));
     }
 
     [HttpPost("departments")]
@@ -499,8 +499,9 @@ public class AdminController : ControllerBase
             existing.DivisionId = dto.DivisionId;
             existing.DisplayColumn = dto.DisplayColumn;
             existing.DisplayOrder = dto.DisplayOrder;
+            existing.ShowNameInDirectory = dto.ShowNameInDirectory;
             await _context.SaveChangesAsync();
-            return Ok(new DepartmentDto(existing.Id, existing.Name, existing.IsActive, existing.DivisionId, existing.DisplayColumn, existing.DisplayOrder));
+            return Ok(new DepartmentDto(existing.Id, existing.Name, existing.IsActive, existing.DivisionId, existing.DisplayColumn, existing.DisplayOrder, existing.ShowNameInDirectory));
         }
 
         var department = new Department
@@ -509,13 +510,14 @@ public class AdminController : ControllerBase
             IsActive = dto.IsActive,
             DivisionId = dto.DivisionId,
             DisplayColumn = dto.DisplayColumn,
-            DisplayOrder = dto.DisplayOrder
+            DisplayOrder = dto.DisplayOrder,
+            ShowNameInDirectory = dto.ShowNameInDirectory
         };
 
         _context.Departments.Add(department);
         await _context.SaveChangesAsync();
 
-        return Ok(new DepartmentDto(department.Id, department.Name, department.IsActive, department.DivisionId, department.DisplayColumn, department.DisplayOrder));
+        return Ok(new DepartmentDto(department.Id, department.Name, department.IsActive, department.DivisionId, department.DisplayColumn, department.DisplayOrder, department.ShowNameInDirectory));
     }
 
     [HttpPut("departments/{deptId}")]
@@ -535,10 +537,11 @@ public class AdminController : ControllerBase
         if (dto.DivisionId.HasValue) department.DivisionId = dto.DivisionId;
         if (dto.DisplayColumn.HasValue) department.DisplayColumn = dto.DisplayColumn.Value;
         if (dto.DisplayOrder.HasValue) department.DisplayOrder = dto.DisplayOrder.Value;
+        if (dto.ShowNameInDirectory.HasValue) department.ShowNameInDirectory = dto.ShowNameInDirectory.Value;
 
         await _context.SaveChangesAsync();
 
-        return Ok(new DepartmentDto(department.Id, department.Name, department.IsActive, department.DivisionId, department.DisplayColumn, department.DisplayOrder));
+        return Ok(new DepartmentDto(department.Id, department.Name, department.IsActive, department.DivisionId, department.DisplayColumn, department.DisplayOrder, department.ShowNameInDirectory));
     }
 
     [HttpDelete("departments/{deptId}")]
@@ -557,6 +560,111 @@ public class AdminController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { message = "Department deleted" });
+    }
+
+    // ===== DepartmentItem Management =====
+
+    [HttpGet("department-items/{departmentId}")]
+    public async Task<ActionResult<List<DepartmentItemDto>>> GetDepartmentItems(int departmentId)
+    {
+        var adminCheck = await RequireAdminAsync();
+        if (adminCheck != null) return adminCheck;
+
+        var items = await _context.DepartmentItems
+            .Where(di => di.DepartmentId == departmentId && di.IsActive)
+            .OrderBy(di => di.DisplayOrder)
+            .ThenBy(di => di.Id)
+            .ToListAsync();
+
+        return Ok(items.Select(di => new DepartmentItemDto(
+            di.Id, di.DepartmentId, di.Name, di.Extension, di.ItemType, di.DisplayOrder, di.IsActive
+        )));
+    }
+
+    [HttpPost("department-items")]
+    public async Task<ActionResult<DepartmentItemDto>> CreateDepartmentItem([FromBody] DepartmentItemCreateDto dto)
+    {
+        var adminCheck = await RequireAdminAsync();
+        if (adminCheck != null) return adminCheck;
+
+        if (dto.DepartmentId <= 0)
+        {
+            return BadRequest(new { detail = "無效的部門 ID" });
+        }
+
+        var department = await _context.Departments.FindAsync(dto.DepartmentId);
+        if (department == null)
+        {
+            return NotFound(new { detail = $"找不到部門 (ID: {dto.DepartmentId})" });
+        }
+
+        if (dto.ItemType != "room" && dto.ItemType != "text")
+        {
+            return BadRequest(new { detail = "ItemType 必須是 'room' 或 'text'" });
+        }
+
+        var item = new DepartmentItem
+        {
+            DepartmentId = dto.DepartmentId,
+            Name = dto.Name,
+            Extension = dto.Extension,
+            ItemType = dto.ItemType,
+            DisplayOrder = dto.DisplayOrder,
+            IsActive = true
+        };
+
+        _context.DepartmentItems.Add(item);
+        await _context.SaveChangesAsync();
+
+        return Ok(new DepartmentItemDto(item.Id, item.DepartmentId, item.Name, item.Extension, item.ItemType, item.DisplayOrder, item.IsActive));
+    }
+
+    [HttpPut("department-items/{itemId}")]
+    public async Task<ActionResult<DepartmentItemDto>> UpdateDepartmentItem(int itemId, [FromBody] DepartmentItemUpdateDto dto)
+    {
+        var adminCheck = await RequireAdminAsync();
+        if (adminCheck != null) return adminCheck;
+
+        var item = await _context.DepartmentItems.FindAsync(itemId);
+        if (item == null)
+        {
+            return NotFound(new { detail = "找不到項目" });
+        }
+
+        if (dto.Name != null) item.Name = dto.Name;
+        if (dto.Extension != null) item.Extension = dto.Extension;
+        if (dto.ItemType != null)
+        {
+            if (dto.ItemType != "room" && dto.ItemType != "text")
+            {
+                return BadRequest(new { detail = "ItemType 必須是 'room' 或 'text'" });
+            }
+            item.ItemType = dto.ItemType;
+        }
+        if (dto.DisplayOrder.HasValue) item.DisplayOrder = dto.DisplayOrder.Value;
+        if (dto.IsActive.HasValue) item.IsActive = dto.IsActive.Value;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new DepartmentItemDto(item.Id, item.DepartmentId, item.Name, item.Extension, item.ItemType, item.DisplayOrder, item.IsActive));
+    }
+
+    [HttpDelete("department-items/{itemId}")]
+    public async Task<ActionResult> DeleteDepartmentItem(int itemId)
+    {
+        var adminCheck = await RequireAdminAsync();
+        if (adminCheck != null) return adminCheck;
+
+        var item = await _context.DepartmentItems.FindAsync(itemId);
+        if (item == null)
+        {
+            return NotFound(new { detail = "找不到項目" });
+        }
+
+        item.IsActive = false;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Department item deleted" });
     }
 
     // ===== Order Management =====

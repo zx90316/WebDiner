@@ -21,6 +21,7 @@ interface Department {
     division_id: number | null
     display_column: number
     display_order: number
+    show_name_in_directory: boolean
 }
 
 interface ExtensionUser {
@@ -34,6 +35,16 @@ interface ExtensionUser {
     user_id?: number
 }
 
+interface DepartmentItem {
+    id: number
+    department_id: number
+    name: string
+    extension: string | null
+    item_type: string // "room" or "text"
+    display_order: number
+    is_active: boolean
+}
+
 const authStore = useAuthStore()
 const toastStore = useToastStore()
 
@@ -45,7 +56,10 @@ const editingId = ref<number | null>(null)
 const divisionEditingId = ref<number | null>(null)
 const showDivisionSection = ref(false)
 const departmentUsers = ref<Map<number, ExtensionUser[]>>(new Map())
+const departmentItems = ref<Map<number, DepartmentItem[]>>(new Map())
 const updatingSortOrder = ref<Set<number>>(new Set())
+const editingItemId = ref<number | null>(null)
+const addingItemDeptId = ref<number | null>(null)
 
 // 新增部門表單
 const newDept = reactive({
@@ -53,6 +67,7 @@ const newDept = reactive({
     division_id: null as number | null,
     display_column: 0,
     display_order: 0,
+    show_name_in_directory: true,
 })
 
 // 編輯部門表單
@@ -61,11 +76,26 @@ const editForm = reactive({
     division_id: null as number | null,
     display_column: 0,
     display_order: 0,
+    show_name_in_directory: true,
 })
 
 // 新增/編輯處別表單
 const newDivision = reactive({ name: '', display_order: 0 })
 const editDivision = reactive({ name: '', display_order: 0 })
+
+// 新增/編輯部門項目表單
+const newItem = reactive({
+    name: '',
+    extension: '',
+    item_type: 'text' as 'room' | 'text',
+    display_order: 0
+})
+const editItem = reactive({
+    name: '',
+    extension: '',
+    item_type: 'text' as 'room' | 'text',
+    display_order: 0
+})
 
 const loadData = async () => {
     try {
@@ -100,6 +130,18 @@ const loadData = async () => {
             })
         })
         departmentUsers.value = usersMap
+        
+        // 載入部門項目
+        const itemsMap = new Map<number, DepartmentItem[]>()
+        for (const dept of departments.value) {
+            try {
+                const items = await api.get(`/admin/department-items/${dept.id}`, authStore.token!)
+                itemsMap.set(dept.id, items)
+            } catch {
+                itemsMap.set(dept.id, [])
+            }
+        }
+        departmentItems.value = itemsMap
     } catch {
         toastStore.showToast('載入資料失敗', 'error')
     } finally {
@@ -137,6 +179,7 @@ const handleSubmit = async () => {
         newDept.division_id = null
         newDept.display_column = 0
         newDept.display_order = 0
+        newDept.show_name_in_directory = true
         loadData()
     } catch (error: any) {
         toastStore.showToast(error.message || '操作失敗', 'error')
@@ -151,13 +194,11 @@ const handleEdit = (dept: Department) => {
     editForm.division_id = dept.division_id
     editForm.display_column = dept.display_column || 0
     editForm.display_order = dept.display_order || 0
+    editForm.show_name_in_directory = dept.show_name_in_directory ?? true
 }
 
 const handleUpdate = async () => {
-    if (!editForm.name.trim()) {
-        toastStore.showToast('部門名稱不可為空', 'error')
-        return
-    }
+
     try {
         submitting.value = true
         await api.put(`/admin/departments/${editingId.value}`, editForm, authStore.token!)
@@ -312,6 +353,75 @@ const getColumnDeptCount = (column: typeof columnData.value[0]) => {
     return column.reduce((sum, g) => sum + g.departments.length, 0)
 }
 
+// 部門項目 CRUD
+const handleAddItem = (deptId: number) => {
+    addingItemDeptId.value = deptId
+    newItem.name = ''
+    newItem.extension = ''
+    newItem.item_type = 'text'
+    newItem.display_order = 0
+}
+
+const handleItemSubmit = async (deptId: number) => {
+    try {
+        submitting.value = true
+        await api.post('/admin/department-items', {
+            department_id: deptId,
+            name: newItem.name,
+            extension: newItem.item_type === 'room' ? newItem.extension : null,
+            item_type: newItem.item_type,
+            display_order: newItem.display_order
+        }, authStore.token!)
+        toastStore.showToast('項目已新增', 'success')
+        addingItemDeptId.value = null
+        await loadData()
+    } catch (error: any) {
+        const errorMessage = error.message || error.detail || '操作失敗'
+        console.error('新增項目失敗:', error, '部門 ID:', deptId)
+        toastStore.showToast(errorMessage, 'error')
+    } finally {
+        submitting.value = false
+    }
+}
+
+const handleItemEdit = (item: DepartmentItem) => {
+    editingItemId.value = item.id
+    editItem.name = item.name
+    editItem.extension = item.extension || ''
+    editItem.item_type = item.item_type as 'room' | 'text'
+    editItem.display_order = item.display_order
+}
+
+const handleItemUpdate = async () => {
+    try {
+        submitting.value = true
+        await api.put(`/admin/department-items/${editingItemId.value}`, {
+            name: editItem.name,
+            extension: editItem.item_type === 'room' ? editItem.extension : null,
+            item_type: editItem.item_type,
+            display_order: editItem.display_order
+        }, authStore.token!)
+        toastStore.showToast('項目已更新', 'success')
+        editingItemId.value = null
+        await loadData()
+    } catch (error: any) {
+        toastStore.showToast(error.message || '更新失敗', 'error')
+    } finally {
+        submitting.value = false
+    }
+}
+
+const handleItemDelete = async (itemId: number, name: string) => {
+    if (!confirm(`確定要刪除「${name}」嗎？`)) return
+    try {
+        await api.delete(`/admin/department-items/${itemId}`, authStore.token!)
+        toastStore.showToast('項目已刪除', 'success')
+        await loadData()
+    } catch (error: any) {
+        toastStore.showToast(error.message || '刪除失敗', 'error')
+    }
+}
+
 onMounted(() => {
     loadData()
 })
@@ -448,6 +558,17 @@ onMounted(() => {
                         class="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
                     />
                 </div>
+                <div class="flex items-center gap-2">
+                    <input
+                        v-model="newDept.show_name_in_directory"
+                        type="checkbox"
+                        id="new-show-name"
+                        class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label for="new-show-name" class="text-sm font-medium text-gray-700 whitespace-nowrap">
+                        顯示部門名稱
+                    </label>
+                </div>
                 <LoadingButton
                     type="submit"
                     :loading="submitting"
@@ -529,6 +650,17 @@ onMounted(() => {
                                             class="w-14 p-1 border rounded text-xs"
                                             placeholder="#"
                                         />
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <input
+                                            v-model="editForm.show_name_in_directory"
+                                            type="checkbox"
+                                            id="edit-show-name"
+                                            class="w-3 h-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                        />
+                                        <label for="edit-show-name" class="text-xs text-gray-700 whitespace-nowrap">
+                                            顯示名稱
+                                        </label>
                                     </div>
                                     <div class="flex gap-2">
                                         <button
@@ -618,6 +750,148 @@ onMounted(() => {
                                     </div>
                                     <div v-else class="px-3 py-2 text-xs text-gray-400 text-center bg-gray-50">
                                         尚無人員
+                                    </div>
+                                    
+                                    <!-- 部門項目列表 -->
+                                    <div v-if="departmentItems.get(dept.id)?.length" class="bg-blue-50 divide-y divide-blue-100 border-t-2 border-blue-200">
+                                        <div
+                                            v-for="item in departmentItems.get(dept.id)"
+                                            :key="item.id"
+                                            class="px-3 hover:bg-blue-100 flex items-center justify-between transition group/item"
+                                            style="min-height: 24px;"
+                                        >
+                                            <template v-if="editingItemId === item.id">
+                                                <div class="flex-1 space-y-2">
+                                                    <input
+                                                        v-model="editItem.name"
+                                                        type="text"
+                                                        class="w-full p-1.5 border rounded text-sm"
+                                                        placeholder="名稱"
+                                                    />
+                                                    <div class="flex gap-2">
+                                                        <select
+                                                            v-model="editItem.item_type"
+                                                            class="flex-1 p-1 border rounded text-xs"
+                                                        >
+                                                            <option value="text">純字串</option>
+                                                            <option value="room">會議室/辦公室</option>
+                                                        </select>
+                                                        <input
+                                                            v-if="editItem.item_type === 'room'"
+                                                            v-model="editItem.extension"
+                                                            type="text"
+                                                            placeholder="分機"
+                                                            class="w-20 p-1 border rounded text-xs"
+                                                        />
+                                                        <input
+                                                            v-model.number="editItem.display_order"
+                                                            type="number"
+                                                            min="0"
+                                                            placeholder="排序"
+                                                            class="w-16 p-1 border rounded text-xs"
+                                                        />
+                                                    </div>
+                                                    <div class="flex gap-2">
+                                                        <button
+                                                            @click="handleItemUpdate"
+                                                            :disabled="submitting"
+                                                            class="flex-1 bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600"
+                                                        >
+                                                            儲存
+                                                        </button>
+                                                        <button
+                                                            @click="editingItemId = null"
+                                                            class="flex-1 bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-400"
+                                                        >
+                                                            取消
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template v-else>
+                                                <div class="flex items-center gap-2 flex-1 min-w-0">
+                                                    <span class="font-medium text-gray-800">{{ item.name }}</span>
+                                                </div>
+                                                <div class="flex items-center gap-2">
+                                                    <span
+                                                        v-if="item.extension"
+                                                        class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 rounded text-xs"
+                                                    >
+                                                        {{ item.extension }}
+                                                    </span>
+                                                    <div class="opacity-0 group-hover/item:opacity-100 flex gap-1 transition">
+                                                        <button
+                                                            @click="handleItemEdit(item)"
+                                                            class="text-blue-500 hover:text-blue-700 text-xs px-1"
+                                                        >
+                                                            編輯
+                                                        </button>
+                                                        <button
+                                                            @click="handleItemDelete(item.id, item.name)"
+                                                            class="text-red-500 hover:text-red-700 text-xs px-1"
+                                                        >
+                                                            刪除
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 新增項目按鈕 -->
+                                    <div v-if="addingItemDeptId === dept.id" class="bg-green-50 p-3 border-t-2 border-green-200 space-y-2">
+                                        <input
+                                            v-model="newItem.name"
+                                            type="text"
+                                            placeholder="名稱"
+                                            class="w-full p-1.5 border rounded text-sm"
+                                        />
+                                        <div class="flex gap-2">
+                                            <select
+                                                v-model="newItem.item_type"
+                                                class="flex-1 p-1 border rounded text-xs"
+                                            >
+                                                <option value="text">純字串</option>
+                                                <option value="room">會議室/辦公室</option>
+                                            </select>
+                                            <input
+                                                v-if="newItem.item_type === 'room'"
+                                                v-model="newItem.extension"
+                                                type="text"
+                                                placeholder="分機"
+                                                class="w-20 p-1 border rounded text-xs"
+                                            />
+                                            <input
+                                                v-model.number="newItem.display_order"
+                                                type="number"
+                                                min="0"
+                                                placeholder="排序"
+                                                class="w-16 p-1 border rounded text-xs"
+                                            />
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button
+                                                @click="handleItemSubmit(dept.id)"
+                                                :disabled="submitting"
+                                                class="flex-1 bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600"
+                                            >
+                                                新增
+                                            </button>
+                                            <button
+                                                @click="addingItemDeptId = null"
+                                                class="flex-1 bg-gray-300 text-gray-700 px-2 py-1 rounded text-xs hover:bg-gray-400"
+                                            >
+                                                取消
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div v-else class="px-3 py-1 bg-gray-50 border-t">
+                                        <button
+                                            @click="handleAddItem(dept.id)"
+                                            class="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                                        >
+                                            + 新增項目
+                                        </button>
                                     </div>
                                 </div>
                             </div>

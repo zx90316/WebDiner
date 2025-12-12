@@ -12,6 +12,7 @@ public class WebDinerDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<Division> Divisions { get; set; }
     public DbSet<Department> Departments { get; set; }
+    public DbSet<DepartmentItem> DepartmentItems { get; set; }
     public DbSet<UserDepartment> UserDepartments { get; set; }
     public DbSet<Vendor> Vendors { get; set; }
     public DbSet<VendorMenuItem> VendorMenuItems { get; set; }
@@ -53,6 +54,17 @@ public class WebDinerDbContext : DbContext
                 .WithMany(v => v.Departments)
                 .HasForeignKey(d => d.DivisionId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+        
+        // DepartmentItem
+        modelBuilder.Entity<DepartmentItem>(entity =>
+        {
+            entity.ToTable("DepartmentItems");
+            
+            entity.HasOne(di => di.Department)
+                .WithMany(d => d.DepartmentItems)
+                .HasForeignKey(di => di.DepartmentId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
         
         // UserDepartment (多對多關係)

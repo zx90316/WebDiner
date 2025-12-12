@@ -122,13 +122,23 @@ public class ExtensionDirectoryController : ControllerBase
             // 合併用戶列表（兼任用戶在前，因為只有主管才會兼任）
             var allUsers = filteredSecondaryUsers.Concat(mainUsers).ToList();
 
+            // 獲取部門資訊項目
+            var items = await _context.DepartmentItems
+                .Where(di => di.DepartmentId == dept.Id && di.IsActive)
+                .OrderBy(di => di.DisplayOrder)
+                .ThenBy(di => di.Id)
+                .Select(di => new ExtensionDirectoryItemDto(di.Id, di.Name, di.Extension, di.ItemType))
+                .ToListAsync();
+
             var deptData = new ExtensionDirectoryDepartmentDto(
                 dept.Id,
                 dept.Name,
                 divId == 0 ? null : divId,
                 divId != 0 && divisionMap.ContainsKey(divId) ? divisionMap[divId].Name : null,
                 dept.DisplayOrder,
-                allUsers
+                dept.ShowNameInDirectory,
+                allUsers,
+                items
             );
 
             columnsDict[colIndex][divId].Add(deptData);
@@ -201,7 +211,7 @@ public class ExtensionDirectoryController : ControllerBase
             .ThenBy(d => d.DisplayOrder)
             .ToListAsync();
 
-        return Ok(departments.Select(d => new DepartmentDto(d.Id, d.Name, d.IsActive, d.DivisionId, d.DisplayColumn, d.DisplayOrder)));
+        return Ok(departments.Select(d => new DepartmentDto(d.Id, d.Name, d.IsActive, d.DivisionId, d.DisplayColumn, d.DisplayOrder, d.ShowNameInDirectory)));
     }
 
     [HttpPut("divisions/{divisionId}/position")]

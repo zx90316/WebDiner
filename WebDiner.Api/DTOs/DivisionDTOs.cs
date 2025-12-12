@@ -43,7 +43,8 @@ public record DepartmentDto(
     bool IsActive,
     int? DivisionId,
     int DisplayColumn,
-    int DisplayOrder
+    int DisplayOrder,
+    bool ShowNameInDirectory
 );
 
 public record DepartmentCreateDto(
@@ -51,7 +52,8 @@ public record DepartmentCreateDto(
     bool IsActive = true,
     int? DivisionId = null,
     int DisplayColumn = 0,
-    int DisplayOrder = 0
+    int DisplayOrder = 0,
+    bool ShowNameInDirectory = true
 );
 
 public record DepartmentUpdateDto(
@@ -59,7 +61,8 @@ public record DepartmentUpdateDto(
     bool? IsActive = null,
     int? DivisionId = null,
     int? DisplayColumn = null,
-    int? DisplayOrder = null
+    int? DisplayOrder = null,
+    bool? ShowNameInDirectory = null
 );
 
 public record DepartmentWithDivisionDto(
@@ -69,5 +72,34 @@ public record DepartmentWithDivisionDto(
     int? DivisionId,
     int DisplayColumn,
     int DisplayOrder,
+    bool ShowNameInDirectory,
     string? DivisionName
+);
+
+// ===== DepartmentItem (部門資訊項目) DTOs =====
+
+public record DepartmentItemDto(
+    int Id,
+    int DepartmentId,
+    string Name,
+    string? Extension,
+    string ItemType,
+    int DisplayOrder,
+    bool IsActive
+);
+
+public record DepartmentItemCreateDto(
+    int DepartmentId,
+    string Name,
+    string? Extension = null,
+    string ItemType = "text", // "room" or "text"
+    int DisplayOrder = 0
+);
+
+public record DepartmentItemUpdateDto(
+    string? Name = null,
+    string? Extension = null,
+    string? ItemType = null,
+    int? DisplayOrder = null,
+    bool? IsActive = null
 );
