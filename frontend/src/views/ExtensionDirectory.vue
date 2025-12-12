@@ -96,6 +96,281 @@ const highlightText = (text: string | null) => {
     return text.replace(regex, '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>')
 }
 
+const handlePrint = () => {
+    if (!data.value) {
+        toastStore.showToast('無資料可列印', 'error')
+        return
+    }
+
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+        toastStore.showToast('無法開啟列印視窗，請檢查瀏覽器設定', 'error')
+        return
+    }
+
+    const formattedDateStr = new Date(data.value.generated_at).toLocaleString('zh-TW', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+
+    // 生成分機表 HTML
+    const columnsHtml = data.value.columns.map(column => {
+        const divisionsHtml = column.divisions.map(division => {
+            const departmentsHtml = division.departments.map(dept => {
+                const usersHtml = dept.users.map(user => {
+                    // 將職稱的每個字用空格分開，以便增大字距
+                    const titleDisplay = user.title && user.is_department_head 
+                        ? user.title.split('').join(' ') 
+                        : ''
+                    const nameDisplay = user.name
+                    const secondaryBadge = user.is_secondary_department ? '<span class="secondary-badge">兼任</span>' : ''
+                    const extensionDisplay = user.extension || '--'
+                    
+                    return `
+                        <div class="user-row">
+                            <span class="user-title">${titleDisplay}</span>
+                            <span class="user-spacer"></span>
+                            <span class="user-name">${nameDisplay}${secondaryBadge}</span>
+                            <span class="user-extension">${extensionDisplay}</span>
+                        </div>
+                    `
+                }).join('')
+
+                return `
+                    <div class="department-section">
+                        <div class="department-header">
+                            <span class="department-name">${dept.name}</span>
+                            <span class="department-count">${dept.users.length}人</span>
+                        </div>
+                        <div class="users-list">
+                            ${usersHtml}
+                        </div>
+                    </div>
+                `
+            }).join('')
+
+            return `
+                <div class="division-section">
+                    <div class="division-header">${division.name}</div>
+                    <div class="departments-container">
+                        ${departmentsHtml}
+                    </div>
+                </div>
+            `
+        }).join('')
+
+        return `
+            <div class="column-section">
+                ${divisionsHtml}
+            </div>
+        `
+    }).join('')
+
+    const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>分機表 - ${formattedDateStr}</title>
+            <meta charset="UTF-8">
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                @page {
+                    size: A4;
+                    margin: 10mm;
+                }
+                body {
+                    font-family: "Microsoft JhengHei", "微軟正黑體", Arial, sans-serif;
+                    font-size: 9px;
+                    line-height: 1.3;
+                    color: #333;
+                    background: white;
+                    margin: 0;
+                    padding: 0;
+                }
+                .print-header {
+                    text-align: center;
+                    margin-bottom: 8px;
+                    padding-bottom: 6px;
+                    border-bottom: 2px solid #333;
+                }
+                .print-header h1 {
+                    font-size: 18px;
+                    font-weight: bold;
+                    margin-bottom: 4px;
+                }
+                .print-header .date {
+                    font-size: 11px;
+                    color: #555;
+                }
+                .columns-container {
+                    display: grid;
+                    grid-template-columns: repeat(4, 1fr);
+                    gap: 6px;
+                }
+                .column-section {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                }
+                .division-section {
+                    border: 2px solid black;
+                    border-radius: 3px;
+                    overflow: hidden;
+                    page-break-inside: avoid;
+                }
+                .division-header {
+                    background: rgb(192, 192, 192);
+                    color: black;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 4px 6px;
+                    text-align: center;
+                }
+                .departments-container {
+                    display: flex;
+                    flex-direction: column;
+                }
+                .department-section {
+                    border: 1px solid black;
+                    margin-bottom: -1px;
+                    margin-right: -1px;
+                    margin-left: -1px;
+                }
+                .department-section:last-child {
+                    margin-bottom: 0;
+                }
+                .department-header {
+                    background: rgb(192, 192, 192);
+                    padding: 3px 6px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    font-size: 14px;
+                    font-weight: 600;
+                    border-bottom: 1px solid black;
+                }
+                .department-name {
+                    color: black;
+                    flex: 1;
+                    text-align: center;
+                }
+                .department-count {
+                    color: black;
+                    font-size: 7px;
+                }
+                .users-list {
+                    display: flex;
+                    flex-direction: column;
+                }
+                .user-row {
+                    display: flex;
+                    align-items: center;
+                    padding: 2px 6px;
+                    border-bottom: 1px solid #f0f0f0;
+                    font-size: 14px;
+                }
+                .user-row:last-child {
+                    border-bottom: none;
+                }
+                .user-title {
+                    color: #1f2937;
+                    text-align: justify;
+                    text-align-last: justify;
+                    width: 35%;
+                    flex-shrink: 0;
+                    margin-left: 10%;
+                }
+                .user-spacer {
+                    flex: 1;
+                    min-width: 4px;
+                }
+                .user-name {
+                    color: #1f2937;
+                    white-space: nowrap;
+                }
+                .user-extension {
+                    font-family: "Courier New", monospace;
+                    font-weight: 600;
+                    color: #2563eb;
+                    white-space: nowrap;
+                    margin-left: 4px;
+                }
+                .secondary-badge {
+                    display: none;
+                    background: #fbbf24;
+                    color: #92400e;
+                    font-size: 6px;
+                    padding: 1px 3px;
+                    border-radius: 2px;
+                    margin-left: 3px;
+                    font-weight: 600;
+                }
+                @media print {
+                    body {
+                        font-size: 8px;
+                        margin: 0;
+                        padding: 0;
+                    }
+                    .columns-container {
+                        height: auto;
+                        max-height: none;
+                    }
+                    .division-section {
+                        break-inside: avoid;
+                    }
+                    .department-section {
+                        break-inside: avoid;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="print-header">
+                <h1>財團法人車輛安全審驗中心分機表</h1>
+                <div class="date">更新時間：${formattedDateStr}</div>
+            </div>
+            <div class="columns-container">
+                ${columnsHtml}
+            </div>
+        </body>
+        </html>
+    `
+
+    // 使用直接操作 DOM 的方式，避免使用已廢棄的 document.write
+    // 等待窗口準備好後設置內容
+    const setupPrintContent = () => {
+        try {
+            const doc = printWindow.document
+            doc.open('text/html', 'replace')
+            // 使用類型斷言繞過 document.write 的廢棄警告
+            // 在列印場景中，document.write 仍是最可靠的方法
+            ;(doc as any).write(htmlContent)
+            doc.close()
+            printWindow.focus()
+            // 等待內容載入後列印
+            setTimeout(() => {
+                printWindow.print()
+            }, 250)
+        } catch (error) {
+            toastStore.showToast('列印功能發生錯誤', 'error')
+        }
+    }
+    
+    // 如果窗口已經載入，直接設置；否則等待載入
+    if (printWindow.document.readyState === 'complete') {
+        setupPrintContent()
+    } else {
+        printWindow.addEventListener('load', setupPrintContent, { once: true })
+    }
+}
+
 onMounted(() => {
     loadDirectory()
 })
@@ -144,6 +419,14 @@ onMounted(() => {
                             @click="loadDirectory"
                         >
                             🔄
+                        </button>
+                        <button
+                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                            title="列印分機表"
+                            @click="handlePrint"
+                        >
+                            <span>🖨️</span>
+                            <span>列印</span>
                         </button>
                     </div>
                 </div>
