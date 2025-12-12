@@ -748,9 +748,6 @@ onMounted(() => {
                                             </div>
                                         </div>
                                     </div>
-                                    <div v-else class="px-3 py-2 text-xs text-gray-400 text-center bg-gray-50">
-                                        尚無人員
-                                    </div>
                                     
                                     <!-- 部門項目列表 -->
                                     <div v-if="departmentItems.get(dept.id)?.length" class="bg-blue-50 divide-y divide-blue-100 border-t-2 border-blue-200">
