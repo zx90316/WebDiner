@@ -156,14 +156,14 @@ onMounted(() => {
                 <div v-for="column in filteredData?.columns" :key="column.column_index" class="space-y-4">
                     <div v-for="division in column.divisions" :key="division.id" class="bg-white rounded-xl shadow-sm border overflow-hidden">
                         <!-- 處別標題 -->
-                        <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-1">
+                        <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4">
                             <h2 class="font-bold text-lg">{{ division.name }}</h2>
                         </div>
 
                         <!-- 部門列表 -->
                         <div class="divide-y">
                             <div v-for="dept in division.departments" :key="dept.id">
-                                <div class="w-full px-4 py-2 bg-gray-50 flex items-center justify-between">
+                                <div class="w-full px-4 bg-gray-50 flex items-center justify-between">
                                     <span class="font-medium text-gray-700">{{ dept.name }}</span>
                                     <span class="text-gray-400 text-sm">{{ dept.users.length }}人</span>
                                 </div>
@@ -171,7 +171,7 @@ onMounted(() => {
                                     <div
                                         v-for="(user, idx) in dept.users"
                                         :key="idx"
-                                        class="px-4 py-2 hover:bg-blue-50 flex items-center justify-between transition group"
+                                        class="px-4 hover:bg-blue-50 flex items-center justify-between transition group"
                                     >
                                         <div class="flex items-center gap-3">
                                             <div>
@@ -187,7 +187,7 @@ onMounted(() => {
                                         <div class="text-right">
                                             <span
                                                 v-if="user.extension"
-                                                class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 py-1 rounded group-hover:bg-blue-100 transition"
+                                                class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 rounded group-hover:bg-blue-100 transition"
                                                 v-html="highlightText(user.extension)"
                                             />
                                             <span v-else class="text-gray-400 text-sm">--</span>

@@ -485,7 +485,7 @@ onMounted(() => {
                         <!-- 處別標題 -->
                         <div
                             :class="[
-                                'px-3 py-2 text-white font-medium',
+                                'px-3 text-white font-medium',
                                 group.divisionId === null
                                     ? 'bg-orange-500'
                                     : 'bg-gradient-to-r from-blue-600 to-blue-700'
@@ -548,7 +548,7 @@ onMounted(() => {
                                 </div>
                                 <!-- 顯示模式 -->
                                 <div v-else>
-                                    <div class="px-3 py-2 hover:bg-gray-50 flex items-center justify-between">
+                                    <div class="px-3 hover:bg-gray-50 flex items-center justify-between">
                                         <div class="flex items-center gap-2">
                                             <span class="text-xs text-gray-400 font-mono">#{{ dept.display_order }}</span>
                                             <span class="font-medium text-gray-700">{{ dept.name }}</span>
@@ -575,7 +575,7 @@ onMounted(() => {
                                         <div
                                             v-for="user in departmentUsers.get(dept.id)"
                                             :key="user.employee_id"
-                                            class="px-3 py-2 hover:bg-blue-50 flex items-center justify-between transition group/user"
+                                            class="px-3 hover:bg-blue-50 flex items-center justify-between transition group/user"
                                         >
                                             <div class="flex items-center gap-2 flex-1 min-w-0">
                                                 <div class="flex items-center gap-1.5 min-w-0 flex-1">
@@ -591,7 +591,7 @@ onMounted(() => {
                                             <div class="flex items-center gap-2">
                                                 <span
                                                     v-if="user.extension"
-                                                    class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 py-1 rounded text-sm"
+                                                    class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 rounded text-sm"
                                                 >
                                                     {{ user.extension }}
                                                 </span>
@@ -610,7 +610,7 @@ onMounted(() => {
                                                     type="number"
                                                     min="0"
                                                     placeholder="特例"
-                                                    class="w-16 px-1.5 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500"
+                                                    class="w-16 px-1.5 border rounded text-xs focus:ring-2 focus:ring-blue-500"
                                                     :disabled="updatingSortOrder.has(user.user_id!)"
                                                 />
                                             </div>
