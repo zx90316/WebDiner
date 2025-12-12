@@ -108,15 +108,50 @@ const filteredData = computed<ExtensionDirectoryData | null>(() => {
     }
 })
 
-const highlightText = (text: string | null) => {
-    if (!text || !searchTerm.value.trim()) return text
+const highlightText = (text: string | null): string => {
+    if (!text || !searchTerm.value.trim()) return text || ''
     const regex = new RegExp(`(${searchTerm.value})`, 'gi')
     return text.replace(regex, '<mark class="bg-yellow-200 px-0.5 rounded">$1</mark>')
 }
 
-// 將文字中的英文部分和符號"・"用 span 包起來，設定字體大小為 5px
+// 將文字中的英文部分和符號"・"用 span 包起來，設定字體大小為 6px
 const wrapEnglishWithSmallFont = (text: string) => {
     return text.replace(/([A-Za-z0-9・]+)/g, '<span style="font-size: 6px;">$1</span>')
+}
+
+// 組合函數：先處理高亮，再處理英文小字體（但跳過已高亮的部分）
+const formatText = (text: string | null): string => {
+    if (!text) return ''
+    // 先處理高亮
+    const result = highlightText(text)
+    // 如果沒有搜尋詞，直接處理小字體
+    if (!searchTerm.value.trim()) {
+        return wrapEnglishWithSmallFont(result)
+    }
+    // 如果有高亮，需要小心處理：只對非高亮部分應用小字體
+    // 使用正則表達式分割字符串，分別處理高亮和非高亮部分
+    const parts: string[] = []
+    const regex = /(<mark[^>]*>.*?<\/mark>)/gi
+    let lastIndex = 0
+    let match
+    
+    while ((match = regex.exec(result)) !== null) {
+        // 添加高亮前的部分（應用小字體）
+        if (match.index > lastIndex) {
+            const beforeText = result.substring(lastIndex, match.index)
+            parts.push(wrapEnglishWithSmallFont(beforeText))
+        }
+        // 添加高亮部分（不處理）
+        parts.push(match[1])
+        lastIndex = regex.lastIndex
+    }
+    // 添加剩餘部分（應用小字體）
+    if (lastIndex < result.length) {
+        const remainingText = result.substring(lastIndex)
+        parts.push(wrapEnglishWithSmallFont(remainingText))
+    }
+    
+    return parts.length > 0 ? parts.join('') : wrapEnglishWithSmallFont(result)
 }
 
 const handlePrint = () => {
@@ -124,300 +159,8 @@ const handlePrint = () => {
         toastStore.showToast('無資料可列印', 'error')
         return
     }
-
-    const printWindow = window.open('', '_blank')
-    if (!printWindow) {
-        toastStore.showToast('無法開啟列印視窗，請檢查瀏覽器設定', 'error')
-        return
-    }
-
-    const formattedDateStr = new Date(data.value.generated_at).toLocaleString('zh-TW', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    })
-
-    // 生成分機表 HTML
-    const columnsHtml = data.value.columns.map(column => {
-        const divisionsHtml = column.divisions.map(division => {
-            const departmentsHtml = division.departments.map(dept => {
-                const usersHtml = dept.users.map(user => {
-                    // 將職稱的每個字用空格分開，以便增大字距
-                    const titleDisplay = user.title && user.is_department_head 
-                        ? user.title.split('').join(' ') 
-                        : ''
-                    const hasTitle = titleDisplay !== ''
-                    const nameDisplay = wrapEnglishWithSmallFont(user.name)
-                    const secondaryBadge = user.is_secondary_department ? '<span class="secondary-badge">兼任</span>' : ''
-                    const extensionDisplay = user.extension || '--'
-                    
-                    return `
-                        <div class="user-row">
-                            <span class="user-title"${hasTitle ? ' style="width: 35%;"' : ''}>${titleDisplay}</span>
-                            <span class="user-spacer"></span>
-                            <span class="user-name">${nameDisplay}${secondaryBadge}</span>
-                            <span class="user-extension">${extensionDisplay}</span>
-                        </div>
-                    `
-                }).join('')
-                
-                const itemsHtml = (dept.items || []).map(item => {
-                    const nameDisplay = item.name || '　'
-                    const extensionDisplay = item.item_type === 'room' ? (item.extension || '　') : null
-                    
-                    return `
-                        <div class="user-row">
-                            <span class="user-title"></span>
-                            <span class="user-spacer"></span>
-                            <span class="user-name">${nameDisplay}</span>
-                            ${extensionDisplay !== null ? `<span class="user-extension">${extensionDisplay}</span>` : ''}
-                        </div>
-                    `
-                }).join('')
-
-                const departmentHeader = dept.show_name_in_directory 
-                    ? `<div class="department-header">
-                            <span class="department-name">${dept.name}</span>
-                            <span class="department-count">${dept.users.length}人</span>
-                        </div>`
-                    : ''
-                
-                return `
-                    <div class="department-section">
-                        ${departmentHeader}
-                        <div class="users-list">
-                            ${usersHtml}
-                            ${itemsHtml}
-                        </div>
-                    </div>
-                `
-            }).join('')
-
-            return `
-                <div class="division-section">
-                    <div class="division-header">${division.name}</div>
-                    <div class="departments-container">
-                        ${departmentsHtml}
-                    </div>
-                </div>
-            `
-        }).join('')
-
-        return `
-            <div class="column-section">
-                ${divisionsHtml}
-            </div>
-        `
-    }).join('')
-
-    const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>分機表 - ${formattedDateStr}</title>
-            <meta charset="UTF-8">
-            <style>
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                }
-                @page {
-                    size: A4;
-                    margin: 10mm;
-                }
-                body {
-                    font-family: "Microsoft JhengHei", "微軟正黑體", Arial, sans-serif;
-                    font-size: 9px;
-                    line-height: 1.3;
-                    color: #333;
-                    background: white;
-                    margin: 0;
-                    padding: 0;
-                }
-                .print-header {
-                    margin-bottom: 8px;
-                    padding-bottom: 6px;
-                    border-bottom: 2px solid #333;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    position: relative;
-                }
-                .print-header h1 {
-                    font-size: 18px;
-                    font-weight: bold;
-                    margin: 0;
-                }
-                .print-header .date {
-                    font-size: 13px;
-                    color: #555;
-                    position: absolute;
-                    right: 0;
-                }
-                .columns-container {
-                    display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 0;
-                }
-                .column-section {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0;
-                }
-                .column-section:not(:first-child) .division-section {
-                    margin-left: -2px;
-                }
-                .division-section:not(:first-child) {
-                    margin-top: -3px;
-                }
-                .division-section {
-                    border: 2px solid black;
-                    overflow: hidden;
-                    page-break-inside: avoid;
-                }
-                .division-header {
-                    background: rgb(192, 192, 192);
-                    color: black;
-                    font-weight: bold;
-                    font-size: 13px;
-                    text-align: center;
-                }
-                .departments-container {
-                    display: flex;
-                    flex-direction: column;
-                }
-                .department-section {
-                    border: 1px solid black;
-                    margin-bottom: -1px;
-                    margin-right: -1px;
-                    margin-left: -1px;
-                }
-                .department-section:last-child {
-                    margin-bottom: 0;
-                }
-                .department-header {
-                    background: rgb(192, 192, 192);
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    font-size: 13px;
-                    font-weight: 600;
-                    border-bottom: 1px solid black;
-                }
-                .department-name {
-                    color: black;
-                    flex: 1;
-                    text-align: center;
-                }
-                .department-count {
-                    color: black;
-                    font-size: 7px;
-                }
-                .users-list {
-                    display: flex;
-                    flex-direction: column;
-                }
-                .user-row {
-                    display: flex;
-                    align-items: center;
-                    font-size: 13px;
-                }
-                .user-row:last-child {
-                    border-bottom: none;
-                }
-                .user-title {
-                    color: #1f2937;
-                    text-align: justify;
-                    text-align-last: justify;
-                    flex-shrink: 0;
-                    margin-left: 10%;
-                }
-                .user-spacer {
-                    flex: 1;
-                    min-width: 4px;
-                }
-                .user-name {
-                    white-space: nowrap;
-                }
-                .user-extension {
-                    font-family: "Courier New", monospace;
-                    font-weight: 600;
-                    white-space: nowrap;
-                    margin-left: 4px;
-                    border-left: 1px solid black;
-                    min-width: 17%;
-                    text-align: center;
-                }
-                .secondary-badge {
-                    display: none;
-                    background: #fbbf24;
-                    color: #92400e;
-                    font-size: 6px;
-                    padding: 1px 3px;
-                    border-radius: 2px;
-                    margin-left: 3px;
-                    font-weight: 600;
-                }
-                @media print {
-                    body {
-                        font-size: 8px;
-                        margin: 0;
-                        padding: 0;
-                    }
-                    .columns-container {
-                        height: auto;
-                        max-height: none;
-                    }
-                    .division-section {
-                        break-inside: avoid;
-                    }
-                    .department-section {
-                        break-inside: avoid;
-                    }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="print-header">
-                <h1>財團法人車輛安全審驗中心分機表</h1>
-                <span class="date">更新時間：${formattedDateStr}</span>
-            </div>
-            <div class="columns-container">
-                ${columnsHtml}
-            </div>
-        </body>
-        </html>
-    `
-
-    // 使用直接操作 DOM 的方式，避免使用已廢棄的 document.write
-    // 等待窗口準備好後設置內容
-    const setupPrintContent = () => {
-        try {
-            const doc = printWindow.document
-            doc.open('text/html', 'replace')
-            // 使用類型斷言繞過 document.write 的廢棄警告
-            // 在列印場景中，document.write 仍是最可靠的方法
-            ;(doc as any).write(htmlContent)
-            doc.close()
-            printWindow.focus()
-            // 等待內容載入後列印
-            setTimeout(() => {
-                printWindow.print()
-            }, 250)
-        } catch (error) {
-            toastStore.showToast('列印功能發生錯誤', 'error')
-        }
-    }
-    
-    // 如果窗口已經載入，直接設置；否則等待載入
-    if (printWindow.document.readyState === 'complete') {
-        setupPrintContent()
-    } else {
-        printWindow.addEventListener('load', setupPrintContent, { once: true })
-    }
+    // 直接調用瀏覽器的列印功能
+    window.print()
 }
 
 onMounted(() => {
@@ -430,123 +173,104 @@ onMounted(() => {
     <div v-else-if="!data" class="min-h-screen bg-gray-100 flex items-center justify-center">
         <div class="text-gray-500">無法載入分機表資料</div>
     </div>
-    <div v-else class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
-        <!-- 頂部標題列 -->
-        <div class="bg-white shadow-sm border-b sticky top-0 z-10">
-            <div class="container mx-auto px-4 py-4">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-800">
-                            📞 財團法人車輛安全審驗中心分機表
-                        </h1>
-                        <p class="text-sm text-gray-500 mt-1">
-                            更新時間：{{ new Date(data.generated_at).toLocaleString('zh-TW') }}
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-4">
-                        <div class="relative">
-                            <input
-                                v-model="searchTerm"
-                                type="text"
-                                placeholder="搜尋姓名、分機、工號..."
-                                class="pl-10 pr-4 py-2 border rounded-lg w-64 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                                🔍
-                            </span>
-                            <button
-                                v-if="searchTerm"
-                                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                @click="searchTerm = ''"
-                            >
-                                ✕
-                            </button>
-                        </div>
+    <div v-else class="extension-directory-container">
+        <!-- 頂部控制列（列印時隱藏） -->
+        <div class="print-controls">
+            <div class="controls-wrapper">
+                <div class="controls-left">
+                    <h1 class="controls-title">
+                        📞 財團法人車輛安全審驗中心分機表
+                    </h1>
+                </div>
+                <div class="controls-right">
+                    <div class="search-wrapper">
+                        <input
+                            v-model="searchTerm"
+                            type="text"
+                            placeholder="搜尋姓名、分機、工號..."
+                            class="search-input"
+                        />
+                        <span class="search-icon">🔍</span>
                         <button
-                            class="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                            title="重新整理"
-                            @click="loadDirectory"
+                            v-if="searchTerm"
+                            class="search-clear"
+                            @click="searchTerm = ''"
                         >
-                            🔄
-                        </button>
-                        <button
-                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                            title="列印分機表"
-                            @click="handlePrint"
-                        >
-                            <span>🖨️</span>
-                            <span>列印</span>
+                            ✕
                         </button>
                     </div>
+                    <button
+                        class="control-button refresh-button"
+                        title="重新整理"
+                        @click="loadDirectory"
+                    >
+                        🔄
+                    </button>
+                    <button
+                        class="control-button print-button"
+                        title="列印分機表"
+                        @click="handlePrint"
+                    >
+                        <span>🖨️</span>
+                        <span>列印</span>
+                    </button>
                 </div>
             </div>
         </div>
 
         <!-- 分機表主體 -->
-        <div class="container mx-auto px-4 py-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                <div v-for="column in filteredData?.columns" :key="column.column_index" class="space-y-4">
-                    <div v-for="division in column.divisions" :key="division.id" class="bg-white rounded-xl shadow-sm border overflow-hidden">
-                        <!-- 處別標題 -->
-                        <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4">
-                            <h2 class="font-bold text-lg">{{ division.name }}</h2>
-                        </div>
-
-                        <!-- 部門列表 -->
-                        <div class="divide-y">
-                            <div v-for="dept in division.departments" :key="dept.id">
-                                <div v-if="dept.show_name_in_directory" class="w-full px-4 bg-gray-50 flex items-center justify-between">
-                                    <span class="font-medium text-gray-700">{{ dept.name }}</span>
-                                    <span class="text-gray-400 text-sm">{{ dept.users.length }}人</span>
+        <div class="directory-content">
+            <div class="print-header">
+                <h1>財團法人車輛安全審驗中心分機表</h1>
+                <span class="print-date">更新時間：{{ new Date(data.generated_at).toLocaleString('zh-TW', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }) }}</span>
+            </div>
+            <div class="columns-container">
+                <div v-for="column in filteredData?.columns" :key="column.column_index" class="column-section">
+                    <div v-for="division in column.divisions" :key="division.id" class="division-section">
+                        <div class="division-header">{{ division.name }}</div>
+                        <div class="departments-container">
+                            <div v-for="dept in division.departments" :key="dept.id" class="department-section">
+                                <div v-if="dept.show_name_in_directory" class="department-header">
+                                    <span class="department-name">{{ dept.name }}</span>
+                                    <span class="department-count">{{ dept.users.length }}人</span>
                                 </div>
-                                <div class="divide-y divide-gray-100">
+                                <div class="users-list">
                                     <div
                                         v-for="(user, idx) in dept.users"
                                         :key="idx"
-                                        class="px-4 hover:bg-blue-50 flex items-center justify-between transition group"
+                                        class="user-row"
                                     >
-                                        <div class="flex items-center gap-3">
-                                            <div>
-                                                <span class="font-medium text-gray-800">
-                                                    <span v-if="user.title && user.is_department_head" class="text-gray-500 text-sm mr-1" v-html="highlightText(user.title)" />
-                                                    <span v-html="highlightText(user.name)" />
-                                                    <span v-if="user.is_secondary_department" class="ml-2 text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-medium">
-                                                        兼任
-                                                    </span>
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="text-right">
-                                            <span
-                                                v-if="user.extension"
-                                                class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 rounded group-hover:bg-blue-100 transition"
-                                                v-html="highlightText(user.extension)"
-                                            />
-                                            <span v-else class="text-gray-400 text-sm">　</span>
-                                        </div>
+                                        <span 
+                                            class="user-title"
+                                            :style="user.title && user.is_department_head ? 'width: 35%;' : ''"
+                                        >
+                                            {{ user.title && user.is_department_head ? user.title.split('').join(' ') : '' }}
+                                        </span>
+                                        <span class="user-spacer"></span>
+                                        <span class="user-name">
+                                            <span v-html="formatText(user.name)"></span>
+                                        </span>
+                                        <span class="user-extension" v-html="highlightText(user.extension || '--')"></span>
                                     </div>
-                                    
-                                    <!-- 部門項目列表 -->
                                     <div
                                         v-for="item in dept.items"
                                         :key="item.id"
-                                        class="px-4 hover:bg-blue-50 flex items-center justify-between transition group/item"
+                                        class="user-row"
                                     >
-                                        <div class="flex items-center gap-3">
-                                            <div>
-                                                <span class="font-medium text-gray-800">
-                                                    <span v-html="highlightText(item.name)" />
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div class="text-right">
-                                            <span
-                                                v-if="item.extension"
-                                                class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 rounded group-hover/item:bg-blue-100 transition"
-                                                v-html="highlightText(item.extension)"
-                                            />
-                                            <span v-else class="text-gray-400 text-sm">　</span>
-                                        </div>
+                                        <span class="user-title"></span>
+                                        <span class="user-spacer"></span>
+                                        <span class="user-name" v-html="highlightText(item.name || '　')"></span>
+                                        <span 
+                                            v-if="item.item_type === 'room'"
+                                            class="user-extension"
+                                            v-html="highlightText(item.extension || '　')"
+                                        ></span>
                                     </div>
                                 </div>
                             </div>
@@ -556,11 +280,336 @@ onMounted(() => {
             </div>
 
             <!-- 無結果提示 -->
-            <div v-if="searchTerm && filteredData?.columns.every((col) => col.divisions.length === 0)" class="text-center py-12 text-gray-500">
-                <div class="text-4xl mb-4">🔍</div>
+            <div v-if="searchTerm && filteredData?.columns.every((col) => col.divisions.length === 0)" class="no-results">
+                <div class="no-results-icon">🔍</div>
                 <div>找不到符合「{{ searchTerm }}」的結果</div>
             </div>
         </div>
     </div>
 </template>
+
+<style scoped>
+.extension-directory-container {
+    min-height: 100vh;
+    background: white;
+    font-family: "Microsoft JhengHei", "微軟正黑體", Arial, sans-serif;
+}
+
+/* 控制列樣式（列印時隱藏） */
+.print-controls {
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid #e5e7eb;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.controls-wrapper {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+}
+
+@media (min-width: 768px) {
+    .controls-wrapper {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+}
+
+.controls-left {
+    flex: 1;
+}
+
+.controls-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #1f2937;
+    margin: 0;
+}
+
+.controls-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.search-wrapper {
+    position: relative;
+}
+
+.search-input {
+    padding: 0.5rem 2.5rem 0.5rem 2.5rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    width: 16rem;
+    font-size: 0.875rem;
+}
+
+.search-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px #3b82f6;
+    border-color: transparent;
+}
+
+.search-icon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    pointer-events: none;
+}
+
+.search-clear {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.search-clear:hover {
+    color: #4b5563;
+}
+
+.control-button {
+    padding: 0.5rem;
+    color: #4b5563;
+    background: none;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.control-button:hover {
+    color: #2563eb;
+    background: #eff6ff;
+}
+
+.print-button {
+    padding: 0.5rem 1rem;
+    background: #16a34a;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.print-button:hover {
+    background: #15803d;
+}
+
+/* 列印版樣式 */
+.directory-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+.print-header {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.375rem;
+    border-bottom: 2px solid #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+.print-header h1 {
+    font-size: 18px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.print-date {
+    font-size: 13px;
+    color: #555;
+    position: absolute;
+    right: 0;
+}
+
+.columns-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+}
+
+.column-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.column-section:not(:first-child) .division-section {
+    margin-left: -2px;
+}
+
+.division-section:not(:first-child) {
+    margin-top: -3px;
+}
+
+.division-section {
+    border: 2px solid black;
+    overflow: hidden;
+    page-break-inside: avoid;
+}
+
+.division-header {
+    background: rgb(192, 192, 192);
+    color: black;
+    font-weight: bold;
+    font-size: 13px;
+    text-align: center;
+}
+
+.departments-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.department-section {
+    border: 1px solid black;
+    margin-bottom: -1px;
+    margin-right: -1px;
+    margin-left: -1px;
+}
+
+.department-section:last-child {
+    margin-bottom: 0;
+}
+
+.department-header {
+    background: rgb(192, 192, 192);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 1px solid black;
+}
+
+.department-name {
+    color: black;
+    flex: 1;
+    text-align: center;
+}
+
+.department-count {
+    color: black;
+    font-size: 7px;
+}
+
+.users-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-row {
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+}
+
+.user-row:last-child {
+    border-bottom: none;
+}
+
+.user-title {
+    color: #1f2937;
+    text-align: justify;
+    text-align-last: justify;
+    flex-shrink: 0;
+    margin-left: 10%;
+}
+
+.user-spacer {
+    flex: 1;
+    min-width: 4px;
+}
+
+.user-name {
+    white-space: nowrap;
+}
+
+.user-extension {
+    border-left: 1px solid black;
+    min-width: 20%;
+    text-align: center;
+}
+
+.no-results {
+    text-align: center;
+    padding: 3rem;
+    color: #6b7280;
+}
+
+.no-results-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+/* 列印樣式 */
+@media print {
+    .print-controls {
+        display: none;
+    }
+
+    .directory-content {
+        padding: 0;
+        max-width: 100%;
+    }
+    
+    body {
+        font-size: 8px;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .columns-container {
+        height: auto;
+        max-height: none;
+    }
+    
+    .division-section {
+        break-inside: avoid;
+    }
+    
+    .department-section {
+        break-inside: avoid;
+    }
+    
+    .print-header {
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+    }
+    
+    .secondary-badge {
+        display: none;
+    }
+}
+
+@page {
+    size: A4;
+    margin: 10mm;
+}
+</style>
+
+<!-- 非 scoped 樣式，用於列印時隱藏全域導航欄 -->
+<style>
+@media print {
+    nav.bg-white.shadow-md,
+    nav[class*="bg-white"][class*="shadow-md"] {
+        display: none !important;
+    }
+}
+</style>
 
