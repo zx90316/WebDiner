@@ -16,6 +16,7 @@ public record UserDto(
     int? DepartmentId,
     string? Title,
     bool IsDepartmentHead,
+    int? CustomSortOrder = null,
     List<int>? SecondaryDepartmentIds = null
 );
 
@@ -44,6 +45,7 @@ public record UserUpdateDto(
     string? Role = null,
     string? Title = null,
     bool? IsDepartmentHead = null,
+    int? CustomSortOrder = null,
     List<int>? SecondaryDepartmentIds = null
 );
 

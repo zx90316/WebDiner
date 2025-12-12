@@ -14,7 +14,7 @@ namespace WebDiner.Api.Controllers;
 /// 提供動態生成分機表的功能
 /// - 處別依據 display_column 和 display_order 排列
 /// - 部門依據 display_order 排列在其所屬處別下
-/// - 部門內人員排序：主管優先，其次按工號由小到大
+/// - 部門內人員排序：特例排序 → 主管優先 → 工號由小到大
 /// 
 /// 結構：處 (Division) → 部 (Department) → 人員 (User)
 /// </summary>
@@ -60,8 +60,10 @@ public class ExtensionDirectoryController : ControllerBase
         }
 
         return users
-            .OrderBy(u => !u.IsDepartmentHead)
-            .ThenBy(u => u.EmployeeId)
+            .OrderBy(u => u.CustomSortOrder.HasValue ? 0 : 1) // 特例排序優先
+            .ThenBy(u => u.CustomSortOrder ?? int.MaxValue) // 特例排序值小的在前
+            .ThenBy(u => !u.IsDepartmentHead) // 主管優先
+            .ThenBy(u => u.EmployeeId) // 工號小到大
             .Select(u => new ExtensionDirectoryUserDto(
                 u.EmployeeId, u.Name, u.Extension, u.Title, u.IsDepartmentHead, isSecondary
             ))

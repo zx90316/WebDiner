@@ -266,6 +266,7 @@ public class AdminController : ControllerBase
         }
         if (dto.Title != null) user.Title = dto.Title;
         if (dto.IsDepartmentHead.HasValue) user.IsDepartmentHead = dto.IsDepartmentHead.Value;
+        if (dto.CustomSortOrder.HasValue) user.CustomSortOrder = dto.CustomSortOrder;
         if (dto.Password != null) user.HashedPassword = _passwordService.HashPassword(dto.Password);
 
         // 處理兼任部門更新
@@ -791,7 +792,7 @@ public class AdminController : ControllerBase
         return new UserDto(
             user.Id, user.EmployeeId, user.Name, user.Extension, user.Email,
             user.IsActive, user.IsAdmin, user.Role, user.DepartmentId,
-            user.Title, user.IsDepartmentHead,
+            user.Title, user.IsDepartmentHead, user.CustomSortOrder,
             secondaryDeptIds.Any() ? secondaryDeptIds : null
         );
     }

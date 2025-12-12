@@ -44,6 +44,8 @@ public class User
     
     public bool IsDepartmentHead { get; set; } = false; // 是否為部門主管
     
+    public int? CustomSortOrder { get; set; } = null; // 特例排序（null 表示使用預設排序）
+    
     // 兼任部門（多對多關係）
     public virtual ICollection<UserDepartment> UserDepartments { get; set; } = new List<UserDepartment>();
     

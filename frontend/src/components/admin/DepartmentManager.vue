@@ -10,6 +10,7 @@ interface Division {
     id: number
     name: string
     is_active: boolean
+    display_column: number
     display_order: number
 }
 
@@ -22,6 +23,17 @@ interface Department {
     display_order: number
 }
 
+interface ExtensionUser {
+    employee_id: string
+    name: string
+    extension: string | null
+    title: string | null
+    is_department_head: boolean
+    is_secondary_department: boolean
+    custom_sort_order?: number | null
+    user_id?: number
+}
+
 const authStore = useAuthStore()
 const toastStore = useToastStore()
 
@@ -32,6 +44,8 @@ const submitting = ref(false)
 const editingId = ref<number | null>(null)
 const divisionEditingId = ref<number | null>(null)
 const showDivisionSection = ref(false)
+const departmentUsers = ref<Map<number, ExtensionUser[]>>(new Map())
+const updatingSortOrder = ref<Set<number>>(new Set())
 
 // 新增部門表單
 const newDept = reactive({
@@ -56,16 +70,56 @@ const editDivision = reactive({ name: '', display_order: 0 })
 const loadData = async () => {
     try {
         loading.value = true
-        const [deptData, divData] = await Promise.all([
+        const [deptData, divData, extensionData, allUsersData] = await Promise.all([
             api.get('/admin/departments', authStore.token!),
             api.get('/admin/divisions', authStore.token!),
+            api.get('/extension-directory/', authStore.token!),
+            api.get('/admin/users', authStore.token!),
         ])
         departments.value = deptData
         divisions.value = divData
+        
+        // 建立員工 ID 到完整用戶資訊的對應
+        const userMap = new Map(allUsersData.map((u: any) => [u.employee_id, u]))
+        
+        // 建立部門人員對應表
+        const usersMap = new Map<number, ExtensionUser[]>()
+        extensionData.columns.forEach((col: any) => {
+            col.divisions.forEach((div: any) => {
+                div.departments.forEach((dept: any) => {
+                    const users = (dept.users || []).map((u: any): ExtensionUser => {
+                        const fullUser: any = userMap.get(u.employee_id)
+                        return {
+                            ...u,
+                            user_id: fullUser?.id,
+                            custom_sort_order: fullUser?.custom_sort_order ?? null
+                        }
+                    })
+                    usersMap.set(dept.id, users)
+                })
+            })
+        })
+        departmentUsers.value = usersMap
     } catch {
         toastStore.showToast('載入資料失敗', 'error')
     } finally {
         loading.value = false
+    }
+}
+
+const updateUserSortOrder = async (userId: number, sortOrder: number | null) => {
+    try {
+        updatingSortOrder.value.add(userId)
+        await api.put(`/admin/users/${userId}`, { custom_sort_order: sortOrder }, authStore.token!)
+        toastStore.showToast('特例排序已更新', 'success')
+        // 重新載入資料以反映排序變化
+        await loadData()
+    } catch (error: any) {
+        toastStore.showToast(error.message || '更新失敗', 'error')
+        // 重新載入以恢復原值
+        await loadData()
+    } finally {
+        updatingSortOrder.value.delete(userId)
     }
 }
 
@@ -237,9 +291,12 @@ const columnData = computed(() => {
         })
 
         // 處別排序：按 display_order 排序，未分類的放最後
+        // 與 ExtensionDirectory.vue 的排序邏輯一致
         columns[col].sort((a, b) => {
-            if (a.divisionId === null) return 1
-            if (b.divisionId === null) return -1
+            // 未分類的（divisionId === null 或 0）放最後
+            if (a.divisionId === null || a.divisionId === 0) return 1
+            if (b.divisionId === null || b.divisionId === 0) return -1
+            // 按 display_order 排序
             return a.divisionOrder - b.divisionOrder
         })
     }
@@ -490,24 +547,77 @@ onMounted(() => {
                                     </div>
                                 </div>
                                 <!-- 顯示模式 -->
-                                <div v-else class="px-3 py-2 hover:bg-gray-50 flex items-center justify-between">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-xs text-gray-400 font-mono">#{{ dept.display_order }}</span>
-                                        <span class="font-medium text-gray-700">{{ dept.name }}</span>
+                                <div v-else>
+                                    <div class="px-3 py-2 hover:bg-gray-50 flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs text-gray-400 font-mono">#{{ dept.display_order }}</span>
+                                            <span class="font-medium text-gray-700">{{ dept.name }}</span>
+                                            <span class="text-xs text-gray-400">({{ (departmentUsers.get(dept.id) || []).length }}人)</span>
+                                        </div>
+                                        <div class="opacity-0 group-hover:opacity-100 flex gap-1 transition">
+                                            <button
+                                                @click="handleEdit(dept)"
+                                                class="text-blue-500 hover:text-blue-700 text-xs px-1"
+                                            >
+                                                編輯
+                                            </button>
+                                            <button
+                                                @click="handleDelete(dept.id, dept.name)"
+                                                class="text-red-500 hover:text-red-700 text-xs px-1"
+                                            >
+                                                刪除
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div class="opacity-0 group-hover:opacity-100 flex gap-1 transition">
-                                        <button
-                                            @click="handleEdit(dept)"
-                                            class="text-blue-500 hover:text-blue-700 text-xs px-1"
+                                    
+                                    <!-- 人員列表 -->
+                                    <div v-if="departmentUsers.get(dept.id)?.length" class="bg-gray-50 divide-y divide-gray-200">
+                                        <div
+                                            v-for="user in departmentUsers.get(dept.id)"
+                                            :key="user.employee_id"
+                                            class="px-3 py-2 hover:bg-blue-50 flex items-center justify-between transition group/user"
                                         >
-                                            編輯
-                                        </button>
-                                        <button
-                                            @click="handleDelete(dept.id, dept.name)"
-                                            class="text-red-500 hover:text-red-700 text-xs px-1"
-                                        >
-                                            刪除
-                                        </button>
+                                            <div class="flex items-center gap-2 flex-1 min-w-0">
+                                                <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                                                    <span v-if="user.title && user.is_department_head" class="text-gray-500 text-xs mr-1">
+                                                        {{ user.title }}
+                                                    </span>
+                                                    <span class="font-medium text-gray-800 truncate">{{ user.name }}</span>
+                                                    <span v-if="user.is_secondary_department" class="ml-1 text-xs bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap">
+                                                        兼任
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <span
+                                                    v-if="user.extension"
+                                                    class="font-mono text-blue-600 font-semibold bg-blue-50 px-2 py-1 rounded text-sm"
+                                                >
+                                                    {{ user.extension }}
+                                                </span>
+                                                <span v-else class="text-gray-400 text-xs">--</span>
+                                                <input
+                                                    v-if="user.user_id"
+                                                    :value="user.custom_sort_order ?? ''"
+                                                    @blur="(e) => {
+                                                        const value = (e.target as HTMLInputElement).value
+                                                        const numValue = value === '' ? null : parseInt(value)
+                                                        if (numValue !== user.custom_sort_order) {
+                                                            updateUserSortOrder(user.user_id!, numValue)
+                                                        }
+                                                    }"
+                                                    @keyup.enter="(e) => (e.target as HTMLInputElement).blur()"
+                                                    type="number"
+                                                    min="0"
+                                                    placeholder="特例"
+                                                    class="w-16 px-1.5 py-1 border rounded text-xs focus:ring-2 focus:ring-blue-500"
+                                                    :disabled="updatingSortOrder.has(user.user_id!)"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div v-else class="px-3 py-2 text-xs text-gray-400 text-center bg-gray-50">
+                                        尚無人員
                                     </div>
                                 </div>
                             </div>
