@@ -238,7 +238,6 @@ onMounted(() => {
                             <div v-for="dept in division.departments" :key="dept.id" class="department-section">
                                 <div v-if="dept.show_name_in_directory" class="department-header">
                                     <span class="department-name">{{ dept.name }}</span>
-                                    <span class="department-count">{{ dept.users.length }}人</span>
                                 </div>
                                 <div class="users-list">
                                     <div
